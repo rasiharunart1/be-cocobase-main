@@ -110,4 +110,10 @@ const handleDeviceData = async (token, weight) => {
     }
 };
 
-module.exports = { initMQTT };
+const publishWeight = (token, weight) => {
+    if (client && client.connected) {
+        client.publish(`cocobase/loadcell/${token}/weight`, weight.toString());
+    }
+};
+
+module.exports = { initMQTT, publishWeight };
