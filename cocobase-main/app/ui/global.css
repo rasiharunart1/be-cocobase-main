@@ -1,0 +1,30 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+input[type='number'] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+input[type='number']::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type='number']::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.prose img {
+  @apply rounded-lg;
+  @apply mx-auto;
+  @apply my-4;
+}
+
+.prose a {
+  @apply text-blue-600;
+  @apply hover:text-blue-800;
+  @apply transition-colors;
+}
