@@ -1,7 +1,9 @@
-const marked = require("marked");
 const sanitizeHtml = require("sanitize-html");
 
-const convertMarkdownToHtml = (markdown) => {
+const convertMarkdownToHtml = async (markdown) => {
+  // Dynamic import for marked (ESM only in 15.x)
+  const { marked } = await import("marked");
+
   // Konfigurasi marked
   marked.setOptions({
     breaks: true,
@@ -33,7 +35,7 @@ const convertMarkdownToHtml = (markdown) => {
   };
 
   // Konversi markdown ke HTML dan sanitasi
-  const rawHtml = marked.parse(markdown);
+  const rawHtml = await marked.parse(markdown);
   const cleanHtml = sanitizeHtml(rawHtml, sanitizeOptions);
 
   return cleanHtml;

@@ -18,9 +18,9 @@ const createCocoblog = async (req, res, next) => {
       return handleErrorResponse(res, error);
     }
 
-    const {linkGambar, ...dataProduk} = value;
+    const { linkGambar, ...dataProduk } = value;
 
-    const isi = convertMarkdownToHtml(dataProduk.isi);
+    const isi = await convertMarkdownToHtml(dataProduk.isi);
 
     const cocoblog = await prisma.cocoblog.create({
       data: {
@@ -52,11 +52,11 @@ const getAllCocoblog = async (req, res, next) => {
 
     const whereClause = search
       ? {
-          judul: {
-            contains: search,
-            mode: "insensitive",
-          },
-        }
+        judul: {
+          contains: search,
+          mode: "insensitive",
+        },
+      }
       : {};
 
     const [getCocoblog, { _count }] = await Promise.all([
@@ -151,8 +151,8 @@ const updateCocoblog = async (req, res, next) => {
       });
     }
 
-    const {linkGambar, ...dataCocoblog} = value;
-    const isi = convertMarkdownToHtml(dataCocoblog.isi);
+    const { linkGambar, ...dataCocoblog } = value;
+    const isi = await convertMarkdownToHtml(dataCocoblog.isi);
 
     if (req.file) {
       await prisma.gambar.deleteMany({ where: { CocoblogId: Number(id) } });
@@ -167,28 +167,28 @@ const updateCocoblog = async (req, res, next) => {
         err: null,
         data: { cocoblog, gambar },
       });
-  } else {
-    if (!linkGambar) {
-      return res.status(404).json({
-        success: false,
-        message: "Link gambar tidak ditemukan",
-        data: null,
+    } else {
+      if (!linkGambar) {
+        return res.status(404).json({
+          success: false,
+          message: "Link gambar tidak ditemukan",
+          data: null,
+        });
+      }
+
+      const cocoblog = await prisma.cocoblog.update({
+        where: { id: parseInt(id) },
+        data: {
+          id_admin,
+          ...dataCocoblog,
+        },
+      });
+      res.status(200).json({
+        success: true,
+        message: "Update produk berhasil",
+        data: cocoblog,
       });
     }
-
-    const cocoblog = await prisma.cocoblog.update({
-      where: { id: parseInt(id) },
-      data: {
-        id_admin,
-        ...dataCocoblog,
-      },
-    });
-    res.status(200).json({
-      success: true,
-      message: "Update produk berhasil",
-      data: cocoblog,
-    });
-  }
   } catch (err) {
     next(err);
     return handleErrorResponse(res, err);
