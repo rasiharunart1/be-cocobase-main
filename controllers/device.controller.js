@@ -1,5 +1,5 @@
 const prisma = require("../libs/prisma");
-const { v4: uuidv4 } = require("uuid");
+const crypto = require("crypto");
 
 const getDevices = async (req, res, next) => {
     try {
@@ -15,7 +15,7 @@ const getDevices = async (req, res, next) => {
 const createDevice = async (req, res, next) => {
     try {
         const { name, threshold } = req.body;
-        const token = uuidv4();
+        const token = crypto.randomUUID();
         const device = await prisma.device.create({
             data: {
                 name,
