@@ -44,6 +44,7 @@ const produkSchema = joi.object({
   nama: joi.string().required(),
   link: joi.string().required(),
   deskripsi: joi.string().required(),
+  harga: joi.number().required(),
   linkGambar: joi.string(),
 });
 

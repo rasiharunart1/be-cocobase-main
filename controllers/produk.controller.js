@@ -21,6 +21,7 @@ const createProduk = async (req, res, next) => {
       data: {
         id_admin,
         ...dataProduk,
+        harga: parseInt(dataProduk.harga),
       },
     });
 
@@ -53,7 +54,7 @@ const getAllProduk = async (req, res, next) => {
         where: search
           ? { nama: { contains: search, mode: "insensitive" } }
           : {},
-        include: { gambar: { select: { url: true } }, transaksi: {select: {jumlah: true}} },
+        include: { gambar: { select: { url: true } }, transaksi: { select: { jumlah: true } } },
         skip,
         take,
         orderBy: {
@@ -72,7 +73,7 @@ const getAllProduk = async (req, res, next) => {
       const { transaksi, ...rest } = produk;
       return {
         ...rest,
-        jumlah: transaksi.reduce((acc, transaksi) => acc + transaksi.jumlah, 0 ),
+        jumlah: transaksi.reduce((acc, transaksi) => acc + transaksi.jumlah, 0),
         gambar: produk.gambar[0]?.url || null,
       };
     });
@@ -158,6 +159,7 @@ const updateProduk = async (req, res, next) => {
         data: {
           id_admin,
           ...dataProduk,
+          harga: parseInt(dataProduk.harga),
         },
       });
       res.status(200).json({
@@ -178,6 +180,7 @@ const updateProduk = async (req, res, next) => {
         data: {
           id_admin,
           ...dataProduk,
+          harga: parseInt(dataProduk.harga),
         },
       });
       res.status(200).json({
