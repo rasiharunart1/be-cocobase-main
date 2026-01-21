@@ -1,4 +1,5 @@
 const prisma = require('../libs/prisma');
+const { publishRealtimeWeight, publishDashboardUpdate } = require('../libs/mqtt');
 
 const saveLoadcellReading = async (req, res, next) => {
   try {
@@ -82,6 +83,9 @@ const ingestData = async (req, res, next) => {
       return res.status(404).json({ success: false, message: "Device not found" });
     }
 
+    // Broadcast to real-time UI topic immediately
+    publishRealtimeWeight(token, weight);
+
     // Save reading
     await prisma.loadcellReading.create({
       data: { weight: parseFloat(weight), deviceId: device.id }
@@ -105,6 +109,9 @@ const ingestData = async (req, res, next) => {
         prisma.device.update({ where: { id: device.id }, data: { isReady: false } })
       ]);
 
+      // Trigger dashboard update
+      publishDashboardUpdate();
+
       // Note: We don't publish MQTT alert here because serverless might not have time, 
       // but the frontend already uses MQTT/Websockets to show real-time anyway.
 
@@ -117,8 +124,50 @@ const ingestData = async (req, res, next) => {
   }
 };
 
+const deletePackingLog = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    await prisma.packingLog.delete({
+      where: { id: parseInt(id) }
+    });
+
+    res.status(200).json({
+      success: true,
+      message: "Log deleted successfully"
+    });
+  } catch (err) {
+    if (err.code === 'P2025') {
+      return res.status(404).json({ success: false, message: "Log not found" });
+    }
+    next(err);
+  }
+};
+
+const resetDeviceLogs = async (req, res, next) => {
+  try {
+    const { deviceId } = req.params;
+    const id = parseInt(deviceId);
+
+    // Use transaction to delete both logs and raw readings
+    await prisma.$transaction([
+      prisma.packingLog.deleteMany({ where: { deviceId: id } }),
+      prisma.loadcellReading.deleteMany({ where: { deviceId: id } })
+    ]);
+
+    res.status(200).json({
+      success: true,
+      message: "All logs for this device have been reset"
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
   getPackingLogs,
   getLatestLoadcellReading,
   ingestData,
+  deletePackingLog,
+  resetDeviceLogs
 };

@@ -3,9 +3,9 @@ const dotenv = require('dotenv');
 dotenv.config();
 
 // CONFIGURATION
-const API_URL = 'https://be-cocobase-main.vercel.app/api/v1/iot/loadcell/ingest'; // Change to Vercel URL for production test
+const API_URL = 'http://localhost:5000/api/v1/iot/loadcell/ingest'; // Change to Vercel URL for production test
 const DEVICE_TOKEN = '7400e85c-80ef-4352-8400-6361294d3050';
-const SLEEP_MS = 2000;
+const SLEEP_MS = 500;
 
 console.log('--- COCOBASE HTTP IoT SIMULATOR ---');
 console.log(`Target: ${API_URL}`);
