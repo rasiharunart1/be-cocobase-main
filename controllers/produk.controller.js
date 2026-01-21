@@ -22,6 +22,8 @@ const createProduk = async (req, res, next) => {
         id_admin,
         ...dataProduk,
         harga: parseInt(dataProduk.harga),
+        jumlah: parseInt(dataProduk.jumlah) || 0,
+        unit: dataProduk.unit || 'KG',
       },
     });
 

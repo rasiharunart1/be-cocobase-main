@@ -59,6 +59,11 @@ model Produksi {
   updatedAt DateTime @updatedAt
 }
 
+enum UnitType {
+  KG
+  POUCH
+}
+
 model Produk {
   id        Int         @id @default(autoincrement())
   id_admin  Int
@@ -67,6 +72,7 @@ model Produk {
   deskripsi String
   harga     Int         @default(0)
   jumlah    Int         @default(0)
+  unit      UnitType    @default(KG)
   gambar    Gambar[]
   transaksi Transaksi[]
 
