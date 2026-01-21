@@ -75,7 +75,9 @@ const getAllProduk = async (req, res, next) => {
       const { transaksi, ...rest } = produk;
       return {
         ...rest,
-        jumlah: transaksi.reduce((acc, transaksi) => acc + transaksi.jumlah, 0),
+        // jumlah should be stock from DB.
+        // We create a new field 'terjual' for sales count.
+        terjual: transaksi.reduce((acc, transaksi) => acc + transaksi.jumlah, 0),
         gambar: produk.gambar[0]?.url || null,
       };
     });
