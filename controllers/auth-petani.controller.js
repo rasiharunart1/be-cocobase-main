@@ -13,9 +13,14 @@ const login = async (req, res, next) => {
             });
         }
 
+        const trimmedNama = nama.trim();
+
         const petani = await prisma.petani.findFirst({
             where: {
-                nama: nama
+                nama: {
+                    equals: trimmedNama,
+                    mode: 'insensitive'
+                }
             }
         });
 
