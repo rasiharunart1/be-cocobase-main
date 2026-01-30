@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "react-toastify";
 import Icon from "@mdi/react";
-import { mdiAccountkey, mdiLock, mdiSprout } from "@mdi/js";
+import { mdiAccountKey, mdiLock, mdiSprout } from "@mdi/js";
 
 export default function PetaniLoginPage() {
     const [nama, setNama] = useState("");
@@ -55,7 +55,7 @@ export default function PetaniLoginPage() {
                     <div>
                         <label className="block text-sm font-bold text-gray-700 mb-2">Nama Petani</label>
                         <div className="relative">
-                            <Icon path={mdiAccountkey} size={1} className="absolute left-3 top-3 text-gray-400" />
+                            <Icon path={mdiAccountKey} size={1} className="absolute left-3 top-3 text-gray-400" />
                             <input
                                 type="text"
                                 value={nama}
