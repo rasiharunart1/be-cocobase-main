@@ -22,7 +22,7 @@ export default function PetaniLoginPage() {
             const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/petani/login`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ nama, password }),
+                body: JSON.stringify({ nama: nama.trim(), password }),
             });
             const data = await res.json();
 

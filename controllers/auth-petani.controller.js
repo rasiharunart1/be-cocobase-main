@@ -14,6 +14,7 @@ const login = async (req, res, next) => {
         }
 
         const trimmedNama = nama.trim();
+        console.log(`[Login] Attempt for: "${trimmedNama}"`);
 
         const petani = await prisma.petani.findFirst({
             where: {
@@ -25,20 +26,15 @@ const login = async (req, res, next) => {
         });
 
         if (!petani) {
+            console.log(`[Login] Farmer not found: "${trimmedNama}"`);
             return res.status(404).json({
                 success: false,
                 message: 'Farmer not found',
             });
         }
 
-        // Since we just added password field, old users might not have one. 
-        // We can allow first login to set password or check if password exists
-
         if (!petani.password) {
-            // Should we allow login without password or force setup? 
-            // For now, let's assume if no password, they can't login or need admin to set it.
-            // But maybe for simplicity in this task, if no password set, we allow login with default or reject.
-            // Let's go with: if no password, reject and ask admin to set it.
+            console.log(`[Login] Farmer found but has NO password: "${trimmedNama}"`);
             return res.status(401).json({
                 success: false,
                 message: 'Account not set up for login. Please contact admin.',
@@ -46,6 +42,7 @@ const login = async (req, res, next) => {
         }
 
         const isMatch = await bcrypt.compare(password, petani.password);
+        console.log(`[Login] Password match for "${trimmedNama}": ${isMatch}`);
 
         if (!isMatch) {
             return res.status(401).json({
