@@ -33,6 +33,17 @@ const getPetaniStats = async (req, res, next) => {
             }
         });
 
+        // Get recent production activities
+        const productionActivities = await prisma.produksi.findMany({
+            where: {
+                id_petani: parseInt(petaniId),
+            },
+            orderBy: {
+                createdAt: 'desc',
+            },
+            take: 10,
+        });
+
         res.status(200).json({
             success: true,
             message: 'Farmer statistics retrieved',
@@ -40,7 +51,8 @@ const getPetaniStats = async (req, res, next) => {
                 totalPacking: stats._count.id,
                 totalWeight: stats._sum.weight || 0,
                 averageWeight: stats._avg.weight || 0,
-                recentLogs
+                recentLogs,
+                productionActivities
             },
         });
     } catch (err) {

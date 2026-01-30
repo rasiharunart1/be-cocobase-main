@@ -1,13 +1,14 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { poppins } from "@/app/ui/fonts";
 import "../globals.css";
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
-const inter = Inter({ subsets: ["latin"] });
-
 export const metadata: Metadata = {
-    title: "Cocobase Farmer",
+    title: {
+        template: "%s | Cocobase Farmer",
+        default: "Cocobase Farmer",
+    },
     description: "Farmer Dashboard for Packing Monitoring",
 };
 
@@ -18,9 +19,9 @@ export default function PetaniLayout({
 }>) {
     return (
         <html lang="en">
-            <body className={inter.className}>
-                {children}
+            <body className={`${poppins.className} antialiased`}>
                 <ToastContainer />
+                {children}
             </body>
         </html>
     );
