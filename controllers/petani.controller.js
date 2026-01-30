@@ -1,4 +1,5 @@
 const prisma = require("../libs/prisma");
+const bcrypt = require("bcrypt");
 const { getPagination } = require("../helpers/pagination");
 const { petaniSchema } = require("../validations/validation");
 const { handleErrorResponse } = require("../middlewares/handleErrorResponse");
@@ -22,12 +23,19 @@ const createPetani = async (req, res, next) => {
       return handleErrorResponse(res, error);
     }
 
+    let dataToCreate = {
+      id_admin,
+      ...value,
+      no_hp: formatNomorHP(value.no_hp),
+    };
+
+    if (req.body.password) {
+      const salt = await bcrypt.genSalt(10);
+      dataToCreate.password = await bcrypt.hash(req.body.password, salt);
+    }
+
     const petani = await prisma.petani.create({
-      data: {
-        id_admin,
-        ...value,
-        no_hp: formatNomorHP(value.no_hp),
-      },
+      data: dataToCreate,
     });
 
     res.status(201).json({
@@ -145,13 +153,20 @@ const updatePetani = async (req, res, next) => {
       });
     }
 
+    let dataToUpdate = {
+      id_admin,
+      ...value,
+      no_hp: formatNomorHP(value.no_hp),
+    };
+
+    if (req.body.password && req.body.password !== "") {
+      const salt = await bcrypt.genSalt(10);
+      dataToUpdate.password = await bcrypt.hash(req.body.password, salt);
+    }
+
     const petani = await prisma.petani.update({
       where: { id: toNumber(id) },
-      data: {
-        id_admin,
-        ...value,
-        no_hp: formatNomorHP(value.no_hp),
-      },
+      data: dataToUpdate,
     });
 
     return res.status(200).json({

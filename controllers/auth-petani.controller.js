@@ -93,7 +93,48 @@ const setPassword = async (req, res, next) => {
     }
 }
 
+// Endpoint for farmer to update their own profile (e.g. change password)
+const updateProfile = async (req, res, next) => {
+    try {
+        const petaniId = req.user.id; // From verifyToken middleware
+        const { nama, password } = req.body;
+
+        let dataToUpdate = {};
+        if (nama) dataToUpdate.nama = nama;
+
+        if (password && password !== "") {
+            const salt = await bcrypt.genSalt(10);
+            dataToUpdate.password = await bcrypt.hash(password, salt);
+        }
+
+        if (Object.keys(dataToUpdate).length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'No changes provided'
+            });
+        }
+
+        const updatedPetani = await prisma.petani.update({
+            where: { id: parseInt(petaniId) },
+            data: dataToUpdate
+        });
+
+        res.status(200).json({
+            success: true,
+            message: 'Profile updated successfully',
+            data: {
+                id: updatedPetani.id,
+                nama: updatedPetani.nama
+            }
+        });
+
+    } catch (err) {
+        next(err);
+    }
+}
+
 module.exports = {
     login,
-    setPassword
+    setPassword,
+    updateProfile
 };
