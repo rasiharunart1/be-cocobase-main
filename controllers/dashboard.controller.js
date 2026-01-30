@@ -155,11 +155,47 @@ const dashboardAtas = async (req, res, next) => {
       },
     ];
 
+    // Get Top Farmers Leaderboard (Top 5)
+    const leaderboard = await prisma.packingLog.groupBy({
+      by: ['petaniId'],
+      _count: { id: true },
+      _sum: { weight: true },
+      where: { petaniId: { not: null } },
+      orderBy: { _sum: { weight: 'desc' } },
+      take: 5,
+    });
+
+    const topFarmers = await Promise.all(
+      leaderboard.map(async (entry, index) => {
+        const petani = await prisma.petani.findUnique({
+          where: { id: entry.petaniId },
+          select: { id: true, nama: true }
+        });
+        return {
+          rank: index + 1,
+          nama: petani?.nama || "Unknown",
+          totalWeight: entry._sum.weight,
+          totalPacking: entry._count.id,
+        };
+      })
+    );
+
+    // Get Overall Weight Stats
+    const weightAgg = await prisma.packingLog.aggregate({
+      _sum: { weight: true },
+      _avg: { weight: true },
+    });
+
+    const totalWeightStats = {
+      totalWeight: weightAgg._sum.weight || 0,
+      averageWeight: weightAgg._avg.weight || 0,
+    };
+
     return res.status(200).json({
       success: true,
       message: "OK",
       err: null,
-      data: { atas, kanan },
+      data: { atas, kanan, topFarmers, totalWeightStats },
     });
   } catch (err) {
     next(err);
