@@ -8,6 +8,7 @@ export const petani = z.object({
     .min(10, { message: "Nomor telepon harus minimal 10 digit" }),
   RT: z.string().min(1, { message: "RT harus diisi" }),
   RW: z.string().min(1, { message: "RW harus diisi" }),
+  password: z.string().optional(),
 });
 
 export const produksi = z.object({

@@ -6,6 +6,7 @@ const petaniSchema = joi.object({
   no_hp: joi.string().required(),
   RT: joi.string().required(),
   RW: joi.string().required(),
+  password: joi.string().optional().allow(""),
 });
 
 const Status = {

@@ -45,6 +45,7 @@ function getValidasiDanBody(params: string, data: any) {
           telepon: data.telepon,
           RT: data.RT,
           RW: data.RW,
+          password: data.password,
         }),
         body: {
           nama: data.nama,
@@ -52,6 +53,7 @@ function getValidasiDanBody(params: string, data: any) {
           no_hp: data.telepon,
           RT: data.RT,
           RW: data.RW,
+          password: data.password,
         },
       };
     case "pembeli":
