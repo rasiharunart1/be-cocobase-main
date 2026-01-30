@@ -4,7 +4,7 @@ require('dotenv').config();
 const MQTT_URL = process.env.MQTT_URL;
 const MQTT_USER = process.env.MQTT_USER;
 const MQTT_PASSWORD = process.env.MQTT_PASSWORD;
-const DEVICE_TOKEN = '16364003-4d58-41e3-9fb7-4b9d8897129f';
+const DEVICE_TOKEN = '7400e85c-80ef-4352-8400-6361294d3050';
 
 if (!MQTT_URL) {
     console.error('MQTT_URL not found in .env');
@@ -32,14 +32,19 @@ client.on('connect', () => {
     const interval = setInterval(() => {
         weight += 1.5; // Simulate sugar filling
 
-        // Once it hits threshold, stay there for a bit then jump to zero
-        if (weight > 12) {
-            console.log('--- Reseting weight to 0 (moving sack) ---');
-            weight = 0;
-        }
+        // Always publish weight for real-time monitoring
+        client.publish(`cocobase/loadcell/${DEVICE_TOKEN}/weight`, weight.toString());
+        console.log(`Published weight: ${weight.toFixed(2)} kg`);
 
-        console.log(`Publishing: ${weight.toFixed(1)}kg to ${topic}`);
-        client.publish(topic, weight.toString());
+        // Simulate "Push Button" event when weight reaches target
+        if (weight >= 10.0) {
+            console.log(">> SIMULATING BUTTON PRESS (PACKING EVENT) <<");
+            client.publish(`cocobase/loadcell/${DEVICE_TOKEN}/pack`, weight.toString());
+
+            // Reset simulation loop
+            weight = 0.0;
+            console.log("Weight reset to 0.0 kg");
+        }
     }, 2000);
 
     client.on('message', (topic, payload) => {

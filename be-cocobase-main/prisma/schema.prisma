@@ -38,11 +38,14 @@ model Petani {
   RT       String
   RW       String
   id_admin Int
+  password String? // for farmer login
 
-  admin     Admin      @relation(fields: [id_admin], references: [id])
-  produksi  Produksi[]
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
+  admin        Admin           @relation(fields: [id_admin], references: [id])
+  produksi     Produksi[]
+  sessions     DeviceSession[]
+  packingLogs  PackingLog[]
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
 }
 
 model Produksi {
@@ -59,13 +62,20 @@ model Produksi {
   updatedAt DateTime @updatedAt
 }
 
+enum UnitType {
+  KG
+  POUCH
+}
+
 model Produk {
   id        Int         @id @default(autoincrement())
   id_admin  Int
   nama      String
   link      String
   deskripsi String
+  harga     Int         @default(0)
   jumlah    Int         @default(0)
+  unit      UnitType    @default(KG)
   gambar    Gambar[]
   transaksi Transaksi[]
 
@@ -164,6 +174,7 @@ model Device {
   
   readings  LoadcellReading[]
   logs      PackingLog[]
+  sessions  DeviceSession[]
   admin     Admin?    @relation(fields: [id_admin], references: [id])
   
   createdAt DateTime @default(now())
@@ -181,7 +192,26 @@ model LoadcellReading {
 model PackingLog {
   id        Int      @id @default(autoincrement())
   deviceId  Int
+  petaniId  Int?     // nullable for backward compatibility with old logs
   weight    Float
   device    Device   @relation(fields: [deviceId], references: [id])
+  petani    Petani?  @relation(fields: [petaniId], references: [id])
   createdAt DateTime @default(now())
+}
+
+model DeviceSession {
+  id        Int       @id @default(autoincrement())
+  deviceId  Int
+  petaniId  Int
+  startedAt DateTime  @default(now())
+  endedAt   DateTime?
+  isActive  Boolean   @default(true)
+  
+  device    Device    @relation(fields: [deviceId], references: [id])
+  petani    Petani    @relation(fields: [petaniId], references: [id])
+  
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  
+  @@index([deviceId, isActive])
 }

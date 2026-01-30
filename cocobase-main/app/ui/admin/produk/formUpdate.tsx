@@ -1,6 +1,6 @@
 "use client";
 import Icon from "@mdi/react";
-import { mdiImage, mdiTimerSand, mdiLink, mdiTextBoxOutline } from "@mdi/js";
+import { mdiImage, mdiTimerSand, mdiLink, mdiTextBoxOutline, mdiCash } from "@mdi/js";
 import { Button } from "../button";
 import { useFormStatus } from "react-dom";
 import { formSubmitHandlerFile } from "@/app/utils/actions";
@@ -14,20 +14,20 @@ export default function FormUpdate({ id }: { id: string }) {
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
 
   const [list, setList] = useState<Produk>();
-  
-    useEffect(() => {
-      const fetchData = async () => {
-        try {
-          const data = await getData({
-            path: `/produk/${id}`,
-          });
-  
-          setList(data);
-        } catch (error) {
-          console.error(error);
-        }
-      };
-      fetchData();
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const data = await getData({
+          path: `/produk/${id}`,
+        });
+
+        setList(data);
+      } catch (error) {
+        console.error(error);
+      }
+    };
+    fetchData();
 
     if (code !== undefined && code.success === false) {
       const errors: { [key: string]: string } = {};
@@ -58,9 +58,8 @@ export default function FormUpdate({ id }: { id: string }) {
             </label>
             <div className="relative">
               <input
-                className={`peer block w-full rounded-md border border-gray-200 py-[9px] pl-10 text-sm outline-2 placeholder:text-gray-500 ${
-                  errors.image ? "border-red-500" : ""
-                }`}
+                className={`peer block w-full rounded-md border border-gray-200 py-[9px] pl-10 text-sm outline-2 placeholder:text-gray-500 ${errors.image ? "border-red-500" : ""
+                  }`}
                 id="image"
                 type="file"
                 name="image"
@@ -83,9 +82,8 @@ export default function FormUpdate({ id }: { id: string }) {
             </label>
             <div className="relative">
               <input
-                className={`peer block w-full rounded-md border border-gray-200 py-[9px] pl-10 text-sm outline-2 placeholder:text-gray-500 ${
-                  errors.nama ? "border-red-500" : ""
-                }`}
+                className={`peer block w-full rounded-md border border-gray-200 py-[9px] pl-10 text-sm outline-2 placeholder:text-gray-500 ${errors.nama ? "border-red-500" : ""
+                  }`}
                 id="nama"
                 type="text"
                 name="nama"
@@ -113,9 +111,8 @@ export default function FormUpdate({ id }: { id: string }) {
             </label>
             <div className="relative">
               <textarea
-                className={`peer block w-full rounded-md border border-gray-200 py-[9px] pl-10 text-sm outline-2 placeholder:text-gray-500 ${
-                  errors.deskripsi ? "border-red-500" : ""
-                }`}
+                className={`peer block w-full rounded-md border border-gray-200 py-[9px] pl-10 text-sm outline-2 placeholder:text-gray-500 ${errors.deskripsi ? "border-red-500" : ""
+                  }`}
                 id="deskripsi"
                 name="deskripsi"
                 placeholder="Deskripsi"
@@ -142,9 +139,8 @@ export default function FormUpdate({ id }: { id: string }) {
             </label>
             <div className="relative">
               <input
-                className={`peer block w-full rounded-md border border-gray-200 py-[9px] pl-10 text-sm outline-2 placeholder:text-gray-500 ${
-                  errors.link ? "border-red-500" : ""
-                }`}
+                className={`peer block w-full rounded-md border border-gray-200 py-[9px] pl-10 text-sm outline-2 placeholder:text-gray-500 ${errors.link ? "border-red-500" : ""
+                  }`}
                 id="link"
                 type="text"
                 name="link"
@@ -163,14 +159,98 @@ export default function FormUpdate({ id }: { id: string }) {
               <p className="text-red-500 text-sm mt-1">{errors.link}</p>
             )}
           </div>
+          <div>
+            <label
+              className="mb-3 mt-5 block text-xs font-medium text-gray-900"
+              htmlFor="harga"
+            >
+              Harga
+            </label>
+            <div className="relative">
+              <input
+                className={`peer block w-full rounded-md border border-gray-200 py-[9px] pl-10 text-sm outline-2 placeholder:text-gray-500 ${errors.harga ? "border-red-500" : ""
+                  }`}
+                id="harga"
+                type="number"
+                name="harga"
+                placeholder="Harga (Rp)"
+                required
+                defaultValue={list?.harga}
+              />
+              <Icon
+                path={mdiCash}
+                size={1}
+                color="black"
+                className="pointer-events-none absolute left-3 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-gray-500 peer-focus:text-gray-900"
+              />
+            </div>
+            {errors.harga && (
+              <p className="text-red-500 text-sm mt-1">{errors.harga}</p>
+            )}
+          </div>
+
+          {/* Jumlah (Quantity) */}
+          <div>
+            <label
+              className="mb-3 mt-5 block text-xs font-medium text-gray-900"
+              htmlFor="jumlah"
+            >
+              Jumlah Stok
+            </label>
+            <div className="relative">
+              <input
+                className={`peer block w-full rounded-md border border-gray-200 py-[9px] pl-10 text-sm outline-2 placeholder:text-gray-500 ${errors.jumlah ? "border-red-500" : ""
+                  }`}
+                id="jumlah"
+                type="number"
+                name="jumlah"
+                placeholder="Jumlah Stok"
+                defaultValue={list?.jumlah ?? 0}
+              />
+              <Icon
+                path={mdiCash}
+                size={1}
+                color="black"
+                className="pointer-events-none absolute left-3 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-gray-500 peer-focus:text-gray-900"
+              />
+            </div>
+            {errors.jumlah && (
+              <p className="text-red-500 text-sm mt-1">{errors.jumlah}</p>
+            )}
+          </div>
+
+          {/* Unit Type */}
+          <div>
+            <label
+              className="mb-3 mt-5 block text-xs font-medium text-gray-900"
+              htmlFor="unit"
+            >
+              Satuan Produk
+            </label>
+            <div className="relative">
+              <select
+                className={`peer block w-full rounded-md border border-gray-200 py-[9px] pl-3 text-sm outline-2 ${errors.unit ? "border-red-500" : ""
+                  }`}
+                id="unit"
+                name="unit"
+                defaultValue={list?.unit ?? "KG"}
+              >
+                <option value="KG">Kilogram (KG)</option>
+                <option value="POUCH">Pouch / Kemasan</option>
+              </select>
+            </div>
+            {errors.unit && (
+              <p className="text-red-500 text-sm mt-1">{errors.unit}</p>
+            )}
+          </div>
         </div>
         <input
-            id="id_update"
-            type="text"
-            name="id_update"
-            hidden
-            defaultValue={id}
-          />
+          id="id_update"
+          type="text"
+          name="id_update"
+          hidden
+          defaultValue={id}
+        />
         <input
           id="params"
           type="text"

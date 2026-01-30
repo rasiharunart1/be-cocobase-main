@@ -37,6 +37,9 @@ const getPackingLogs = async (req, res, next) => {
         createdAt: 'desc',
       },
       take: 50,
+      include: {
+        petani: true
+      }
     });
 
     res.status(200).json({
@@ -100,13 +103,24 @@ const ingestData = async (req, res, next) => {
 
     // Logic for triggering Packing Log
     if (weight >= device.threshold && device.isReady) {
+      // Find active session for this device
+      const activeSession = await prisma.deviceSession.findFirst({
+        where: {
+          deviceId: device.id,
+          isActive: true
+        }
+      });
+
       await prisma.$transaction([
-        prisma.packingLog.create({ data: { weight: parseFloat(weight), deviceId: device.id } }),
+        prisma.packingLog.create({
+          data: {
+            weight: parseFloat(weight),
+            deviceId: device.id,
+            petaniId: activeSession?.petaniId || null
+          }
+        }),
         prisma.device.update({ where: { id: device.id }, data: { isReady: false } })
       ]);
-
-      // Note: We don't publish MQTT alert here because serverless might not have time, 
-      // but the frontend already uses MQTT/Websockets to show real-time anyway.
 
       return res.status(200).json({ success: true, message: "Packing event recorded", alert: true });
     }
@@ -117,8 +131,50 @@ const ingestData = async (req, res, next) => {
   }
 };
 
+const deletePackingLog = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    await prisma.packingLog.delete({
+      where: { id: parseInt(id) }
+    });
+
+    res.status(200).json({
+      success: true,
+      message: "Log deleted successfully"
+    });
+  } catch (err) {
+    if (err.code === 'P2025') {
+      return res.status(404).json({ success: false, message: "Log not found" });
+    }
+    next(err);
+  }
+};
+
+const resetDeviceLogs = async (req, res, next) => {
+  try {
+    const { deviceId } = req.params;
+    const id = parseInt(deviceId);
+
+    // Use transaction to delete both logs and raw readings
+    await prisma.$transaction([
+      prisma.packingLog.deleteMany({ where: { deviceId: id } }),
+      prisma.loadcellReading.deleteMany({ where: { deviceId: id } })
+    ]);
+
+    res.status(200).json({
+      success: true,
+      message: "All logs for this device have been reset"
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
   getPackingLogs,
   getLatestLoadcellReading,
   ingestData,
+  deletePackingLog,
+  resetDeviceLogs
 };

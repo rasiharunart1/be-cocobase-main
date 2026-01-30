@@ -44,6 +44,9 @@ const produkSchema = joi.object({
   nama: joi.string().required(),
   link: joi.string().required(),
   deskripsi: joi.string().required(),
+  harga: joi.number().required(),
+  jumlah: joi.number().optional().default(0),
+  unit: joi.string().valid('KG', 'POUCH').optional().default('KG'),
   linkGambar: joi.string(),
 });
 

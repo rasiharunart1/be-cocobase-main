@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import mqtt from "mqtt";
+import { getData } from "@/app/utils/fetchData";
 import { toast } from "react-toastify";
 import Icon from "@mdi/react";
-import { mdiDevices, mdiWeightKilogram, mdiCog, mdiHistory } from "@mdi/js";
+import { mdiDevices, mdiWeightKilogram, mdiCog, mdiHistory, mdiTrashCan, mdiRefresh, mdiCounter, mdiScaleBalance } from "@mdi/js";
 
 export default function IoTDashboard() {
     const [weight, setWeight] = useState<number>(0);
@@ -13,11 +13,13 @@ export default function IoTDashboard() {
     const [devices, setDevices] = useState<any[]>([]);
     const [selectedDevice, setSelectedDevice] = useState<any>(null);
     const [loading, setLoading] = useState(true);
-
-    const MQTT_WS_URL = process.env.NEXT_PUBLIC_MQTT_URL || "wss://broker.hivemq.com:8884/mqtt";
+    const [petanis, setPetanis] = useState<any[]>([]);
+    const [activeSession, setActiveSession] = useState<any>(null);
+    const [selectedPetaniId, setSelectedPetaniId] = useState<string>("");
 
     useEffect(() => {
         fetchDevices();
+        fetchPetanis();
     }, []);
 
     useEffect(() => {
@@ -26,35 +28,103 @@ export default function IoTDashboard() {
         setWeight(0);
         setThreshold(selectedDevice.threshold);
         fetchLogs(selectedDevice.id);
+        fetchActiveSession(selectedDevice.id);
 
-        const client = mqtt.connect(MQTT_WS_URL, {
-            clean: true,
-            connectTimeout: 4000,
-        });
+        // Poll for latest weight reading every 2 seconds
+        const weightInterval = setInterval(async () => {
+            try {
+                const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/iot/loadcell/latest/${selectedDevice.id}`);
+                const data = await res.json();
+                if (data.success && data.data) {
+                    setWeight(data.data.weight);
 
-        const TOPIC_WEIGHT = `cocobase/loadcell/${selectedDevice.token}/weight`;
-        const TOPIC_ALERTS = `cocobase/loadcell/${selectedDevice.token}/alerts`;
-
-        client.on("connect", () => {
-            console.log(`Connected to MQTT for device: ${selectedDevice.name}`);
-            client.subscribe([TOPIC_WEIGHT, TOPIC_ALERTS]);
-        });
-
-        client.on("message", (topic, payload) => {
-            const message = payload.toString();
-            if (topic === TOPIC_WEIGHT) {
-                setWeight(parseFloat(message));
-            } else if (topic === TOPIC_ALERTS) {
-                const alert = JSON.parse(message);
-                toast.warning(`Bag packed on ${selectedDevice.name}! Weight: ${alert.weight}kg`);
-                fetchLogs(selectedDevice.id);
+                    // Check if weight exceeds threshold and device is ready
+                    if (data.data.weight >= selectedDevice.threshold) {
+                        // Refresh logs to check for new packing events
+                        fetchLogs(selectedDevice.id);
+                    }
+                }
+            } catch (error) {
+                console.error("Failed to fetch weight", error);
             }
-        });
+        }, 2000);
 
         return () => {
-            client.end();
+            clearInterval(weightInterval);
         };
     }, [selectedDevice]);
+
+    const fetchPetanis = async () => {
+        try {
+            const data = await getData({ path: "/petani", limit: 100 });
+            if (data && data.petani) {
+                setPetanis(data.petani);
+            }
+        } catch (error) {
+            console.error("Failed to fetch petanis");
+        }
+    };
+
+    const fetchActiveSession = async (deviceId: number) => {
+        try {
+            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/session/active/${deviceId}`);
+            const data = await res.json();
+            if (data.success) {
+                setActiveSession(data.data);
+            } else {
+                setActiveSession(null);
+            }
+        } catch (error) {
+            setActiveSession(null);
+        }
+    };
+
+    const handleStartSession = async () => {
+        if (!selectedDevice || !selectedPetaniId) {
+            toast.error("Please select a farmer first");
+            return;
+        }
+
+        try {
+            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/session/start`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    deviceId: selectedDevice.id,
+                    petaniId: parseInt(selectedPetaniId)
+                }),
+            });
+            const data = await res.json();
+            if (data.success) {
+                toast.success("Session started");
+                setActiveSession(data.data);
+                setSelectedPetaniId("");
+            } else {
+                toast.error(data.message);
+            }
+        } catch (error) {
+            toast.error("Failed to start session");
+        }
+    };
+
+    const handleEndSession = async () => {
+        if (!selectedDevice) return;
+
+        try {
+            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/session/end/${selectedDevice.id}`, {
+                method: "POST",
+            });
+            const data = await res.json();
+            if (data.success) {
+                toast.success("Session ended");
+                setActiveSession(null);
+            } else {
+                toast.error(data.message);
+            }
+        } catch (error) {
+            toast.error("Failed to end session");
+        }
+    };
 
     const fetchDevices = async () => {
         try {
@@ -104,6 +174,45 @@ export default function IoTDashboard() {
         }
     };
 
+    const handleDeleteLog = async (logId: number) => {
+        if (!confirm("Are you sure you want to delete this log?")) return;
+        try {
+            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/iot/logs/${logId}`, {
+                method: "DELETE",
+            });
+            const data = await res.json();
+            if (data.success) {
+                toast.success("Log deleted");
+                fetchLogs(selectedDevice.id);
+            } else {
+                toast.error(data.message || "Failed to delete log");
+            }
+        } catch (error) {
+            toast.error("Failed to delete log");
+        }
+    };
+
+    const handleResetLogs = async () => {
+        if (!selectedDevice) return;
+        const confirmReset = prompt(`Type "RESET" to confirm deleting ALL logs for ${selectedDevice.name}?`);
+        if (confirmReset !== "RESET") return;
+
+        try {
+            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/iot/logs/reset/${selectedDevice.id}`, {
+                method: "DELETE",
+            });
+            const data = await res.json();
+            if (data.success) {
+                toast.success("All logs reset successfully");
+                fetchLogs(selectedDevice.id);
+            } else {
+                toast.error(data.message || "Failed to reset logs");
+            }
+        } catch (error) {
+            toast.error("Failed to reset logs");
+        }
+    };
+
     if (devices.length === 0 && !loading) {
         return (
             <div className="p-6 text-center">
@@ -136,7 +245,87 @@ export default function IoTDashboard() {
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+            {/* Session Management Panel */}
+            <div className="bg-white p-6 rounded-xl shadow-md border border-gray-100 mb-8">
+                <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
+                    <div>
+                        <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                            <span className="w-3 h-3 rounded-full bg-blue-500 animate-pulse"></span>
+                            Session Management
+                        </h2>
+                        <p className="text-sm text-gray-500">Manage packing session and assign farmer</p>
+                    </div>
+
+                    <div className="flex flex-col md:flex-row gap-3 items-center">
+                        {activeSession ? (
+                            <div className="flex items-center gap-4 bg-green-50 px-4 py-2 rounded-lg border border-green-100">
+                                <div className="text-sm">
+                                    <span className="text-gray-500 block text-xs uppercase font-bold">Current Farmer</span>
+                                    <span className="text-green-700 font-bold text-lg">{activeSession.petani?.nama || "Unknown"}</span>
+                                </div>
+                                <div className="text-sm border-l border-green-200 pl-4">
+                                    <span className="text-gray-500 block text-xs uppercase font-bold">Started At</span>
+                                    <span className="text-gray-700 font-medium">
+                                        {new Date(activeSession.startedAt).toLocaleTimeString()}
+                                    </span>
+                                </div>
+                                <button
+                                    onClick={handleEndSession}
+                                    className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-bold transition shadow-md shadow-red-200 ml-2"
+                                >
+                                    STOP SESSION
+                                </button>
+                            </div>
+                        ) : (
+                            <div className="flex items-center gap-3 w-full md:w-auto">
+                                <select
+                                    className="border border-gray-300 rounded-lg px-4 py-2 text-sm w-full md:w-64 focus:ring-2 focus:ring-blue-500 outline-none"
+                                    value={selectedPetaniId}
+                                    onChange={(e) => setSelectedPetaniId(e.target.value)}
+                                >
+                                    <option value="">-- Select Farmer --</option>
+                                    {petanis.map(p => (
+                                        <option key={p.id} value={p.id}>{p.nama}</option>
+                                    ))}
+                                </select>
+                                <button
+                                    onClick={handleStartSession}
+                                    className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg text-sm font-bold transition shadow-md shadow-blue-200 whitespace-nowrap"
+                                >
+                                    START SESSION
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                {/* Summary: Total Records */}
+                <div className="bg-white p-6 rounded-xl shadow-md flex flex-col items-center justify-center border-t-4 border-[#8B5CF6] relative overflow-hidden">
+                    <div className="absolute top-4 left-4 text-gray-200">
+                        <Icon path={mdiCounter} size={2} />
+                    </div>
+                    <span className="text-gray-500 uppercase text-xs font-bold mb-2 tracking-wider">Total Records</span>
+                    <div className="text-5xl font-black text-[#202224]">
+                        {logs.length}
+                    </div>
+                    <span className="text-sm text-gray-400 mt-2">Packing Logs</span>
+                </div>
+
+                {/* Summary: Total Weight */}
+                <div className="bg-white p-6 rounded-xl shadow-md flex flex-col items-center justify-center border-t-4 border-[#F59E0B] relative overflow-hidden">
+                    <div className="absolute top-4 left-4 text-gray-200">
+                        <Icon path={mdiScaleBalance} size={2} />
+                    </div>
+                    <span className="text-gray-500 uppercase text-xs font-bold mb-2 tracking-wider">Total Weight</span>
+                    <div className="text-5xl font-black text-[#202224]">
+                        {logs.reduce((sum, log) => sum + log.weight, 0).toFixed(1)}
+                        <span className="text-xl text-gray-300 font-light"> kg</span>
+                    </div>
+                    <span className="text-sm text-gray-400 mt-2">Combined Output</span>
+                </div>
+
                 {/* Real-time Weight Display */}
                 <div className="bg-white p-6 rounded-xl shadow-md flex flex-col items-center justify-center border-t-4 border-[#00B69B] relative overflow-hidden">
                     <div className="absolute top-4 left-4 text-gray-300">
@@ -155,7 +344,7 @@ export default function IoTDashboard() {
                 </div>
 
                 {/* Device Settings */}
-                <div className="bg-white p-6 rounded-xl shadow-md border-t-4 border-[#E37D2E]">
+                <div className="bg-white p-6 rounded-xl shadow-md border-t-4 border-[#E37D2E] md:col-span-3">
                     <div className="flex items-center gap-2 mb-6">
                         <Icon path={mdiCog} size={0.9} className="text-[#E37D2E]" />
                         <h2 className="text-lg font-bold text-gray-800">Device Settings</h2>
@@ -163,8 +352,8 @@ export default function IoTDashboard() {
                     <div className="space-y-6">
                         <div>
                             <label className="block text-xs font-bold text-gray-400 uppercase mb-2">Target Weight (Threshold)</label>
-                            <div className="flex gap-2">
-                                <div className="relative flex-grow">
+                            <div className="flex gap-2 items-center">
+                                <div className="relative flex-grow max-w-xs">
                                     <input
                                         type="number"
                                         step="0.1"
@@ -176,9 +365,9 @@ export default function IoTDashboard() {
                                 </div>
                                 <button
                                     onClick={() => updateThreshold(threshold)}
-                                    className="bg-[#E37D2E] text-white px-6 rounded-lg font-bold hover:bg-[#c47438] transition shadow-lg shadow-orange-100"
+                                    className="bg-[#E37D2E] text-white px-6 py-3 rounded-lg font-bold hover:bg-[#c47438] transition shadow-lg shadow-orange-100"
                                 >
-                                    SAVE
+                                    SAVE SETTINGS
                                 </button>
                             </div>
                         </div>
@@ -198,12 +387,22 @@ export default function IoTDashboard() {
                         <Icon path={mdiHistory} size={1} className="text-[#00B69B]" />
                         <h2 className="text-lg font-bold">Packing History</h2>
                     </div>
-                    <button
-                        onClick={() => selectedDevice && fetchLogs(selectedDevice.id)}
-                        className="text-[#00B69B] text-sm font-bold hover:text-[#00947d] flex items-center gap-1"
-                    >
-                        REFRESH DATA
-                    </button>
+                    <div className="flex gap-2">
+                        <button
+                            onClick={handleResetLogs}
+                            className="bg-red-50 text-red-600 hover:bg-red-100 px-4 py-2 rounded-lg text-xs font-bold transition-colors flex items-center gap-1"
+                        >
+                            <Icon path={mdiTrashCan} size={0.7} />
+                            RESET ALL
+                        </button>
+                        <button
+                            onClick={() => selectedDevice && fetchLogs(selectedDevice.id)}
+                            className="text-[#00B69B] text-sm font-bold hover:text-[#00947d] flex items-center gap-1"
+                        >
+                            <Icon path={mdiRefresh} size={0.8} />
+                            REFRESH
+                        </button>
+                    </div>
                 </div>
                 <div className="overflow-x-auto">
                     <table className="w-full text-left">
@@ -211,13 +410,15 @@ export default function IoTDashboard() {
                             <tr>
                                 <th className="px-6 py-4">Timestamp</th>
                                 <th className="px-6 py-4">Weight</th>
-                                <th className="px-6 py-4">Machine Status</th>
+                                <th className="px-6 py-4">Farmer</th>
+                                <th className="px-6 py-4">Status</th>
+                                <th className="px-6 py-4 text-center">Action</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-50 text-sm">
                             {logs.length === 0 ? (
                                 <tr>
-                                    <td colSpan={3} className="px-6 py-12 text-center text-gray-400 font-medium bg-gray-50/20">
+                                    <td colSpan={5} className="px-6 py-12 text-center text-gray-400 font-medium bg-gray-50/20">
                                         {loading ? "Synchronizing logs..." : `No packing history found for ${selectedDevice?.name}`}
                                     </td>
                                 </tr>
@@ -230,8 +431,29 @@ export default function IoTDashboard() {
                                         <td className="px-6 py-4 font-bold text-gray-800 tracking-tight">
                                             {log.weight.toFixed(2)} kg
                                         </td>
+                                        <td className="px-6 py-4 text-gray-700 font-medium">
+                                            {log.petani ? (
+                                                <span className="flex items-center gap-2">
+                                                    <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold">
+                                                        {log.petani.nama.charAt(0)}
+                                                    </span>
+                                                    {log.petani.nama}
+                                                </span>
+                                            ) : (
+                                                <span className="text-gray-400 italic">No Farmer</span>
+                                            )}
+                                        </td>
                                         <td className="px-6 py-4 text-xs">
-                                            <span className="bg-green-50 text-green-600 px-3 py-1 rounded-full font-bold border border-green-100 uppercase tracking-tighter">Success Packed</span>
+                                            <span className="bg-green-50 text-green-600 px-3 py-1 rounded-full font-bold border border-green-100 uppercase tracking-tighter">Success</span>
+                                        </td>
+                                        <td className="px-6 py-4 text-center">
+                                            <button
+                                                onClick={() => handleDeleteLog(log.id)}
+                                                className="text-gray-300 hover:text-red-500 transition-colors"
+                                                title="Delete Log"
+                                            >
+                                                <Icon path={mdiTrashCan} size={0.8} />
+                                            </button>
                                         </td>
                                     </tr>
                                 ))

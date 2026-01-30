@@ -1,6 +1,6 @@
 import { Suspense, lazy } from "react";
 import { SkeletonCard } from "@/app/ui/admin/skeleton/card";
-import { Footer, Chat } from "@/app/(main)/page";
+import { Footer, Chat } from "@/app/(main)/HomeView";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {

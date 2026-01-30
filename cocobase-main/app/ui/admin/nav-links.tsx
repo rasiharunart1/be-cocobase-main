@@ -39,16 +39,7 @@ const links = [
     href: "/admin/cocoblog",
     icon: mdiPostOutline,
   },
-  {
-    name: "Produk",
-    href: "/admin/produk",
-    icon: mdiStoreOutline,
-  },
-  {
-    name: "Pesanan",
-    href: "/admin/pesanan",
-    icon: mdiFormatListBulleted
-  },
+
   {
     name: "Monitoring IoT",
     href: "/admin/iot",

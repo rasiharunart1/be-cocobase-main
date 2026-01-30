@@ -42,13 +42,10 @@ app.get('/', (req, res) => {
 app.use(notFound);
 app.use(serverError);
 
-const { initMQTT } = require('./libs/mqtt');
-
 // Conditional listen for local development
 if (process.env.NODE_ENV !== 'production') {
   app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
-    initMQTT(); // Run MQTT listener only in persistent environments
   });
 }
 

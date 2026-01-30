@@ -28,12 +28,12 @@ export default function Card({
   const [result, setResult] = useState(null);
 
   const handleDelete = async (id: number, params: string) => {
-      const result = await formDeleteHandler({ id, params });
-      setResult(result);
-      if (result.success) {
-        setProdukList(produkList.filter((petani) => petani.id !== id));
-      }
-    };
+    const result = await formDeleteHandler({ id, params });
+    setResult(result);
+    if (result.success) {
+      setProdukList(produkList.filter((petani) => petani.id !== id));
+    }
+  };
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -76,7 +76,10 @@ export default function Card({
                       {produk.nama}
                     </h3>
                     <p className="text-sm font-medium mb-1 line-clamp-3">
-                      Penjualan: {produk.jumlah}
+                      Stok: {produk.jumlah} {produk.unit}
+                    </p>
+                    <p className="text-sm font-medium mb-1 line-clamp-3">
+                      Terjual: {produk.terjual || 0} {produk.unit}
                     </p>
                     <p className=" text-sm line-clamp-3">
                       {produk.deskripsi}
@@ -119,10 +122,10 @@ export default function Card({
           </div>
         )}
       </div>
-    <div className="flex justify-center mt-8">
+      <div className="flex justify-center mt-8">
 
-      <Pagination totalPages={totalItems} />
-    </div>
+        <Pagination totalPages={totalItems} />
+      </div>
     </div>
   );
 }

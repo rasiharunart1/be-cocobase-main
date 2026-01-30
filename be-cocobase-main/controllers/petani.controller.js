@@ -45,12 +45,17 @@ const createPetani = async (req, res, next) => {
 const getAllPetani = async (req, res, next) => {
   try {
     const { page = 1, limit = 10, search } = req.query;
-    const skip = (toNumber(page) - 1) * toNumber(limit);
-    const take = toNumber(limit);
+
+    // Safety check for pagination
+    const pageNum = toNumber(page) || 1;
+    const limitNum = toNumber(limit) || 10;
+
+    const skip = (pageNum - 1) * limitNum;
+    const take = limitNum;
 
     const [getPetani, { _count }] = await Promise.all([
       prisma.petani.findMany({
-        where: search ? {
+        where: search && search !== "undefined" ? {
           nama: {
             contains: search,
             mode: "insensitive",
@@ -64,7 +69,7 @@ const getAllPetani = async (req, res, next) => {
       }),
       prisma.petani.aggregate({
         _count: { id: true },
-        where: search ? {
+        where: search && search !== "undefined" ? {
           nama: {
             contains: search,
             mode: "insensitive",
@@ -73,7 +78,7 @@ const getAllPetani = async (req, res, next) => {
       }),
     ]);
 
-    const pagination = getPagination(req, res, _count.id, page, limit, search);
+    const pagination = getPagination(req, res, _count.id, pageNum, limitNum, search);
     return res.status(200).json({
       success: true,
       message: "OK",
@@ -81,7 +86,7 @@ const getAllPetani = async (req, res, next) => {
       data: { pagination, petani: getPetani },
     });
   } catch (err) {
-    next(err);
+    // next(err); // Removed to prevent double response
     handleErrorResponse(res, err);
   }
 };

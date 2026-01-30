@@ -7,8 +7,10 @@ import { mdiFilePdfBox, mdiFilterVariant } from "@mdi/js";
 
 export default function ReportsPage() {
     const [devices, setDevices] = useState<any[]>([]);
+    const [petanis, setPetanis] = useState<any[]>([]);
     const [filters, setFilters] = useState({
         deviceId: "",
+        petaniId: "",
         type: "daily",
         start: "",
         end: "",
@@ -16,6 +18,7 @@ export default function ReportsPage() {
 
     useEffect(() => {
         fetchDevices();
+        fetchPetanis();
     }, []);
 
     const fetchDevices = async () => {
@@ -30,6 +33,18 @@ export default function ReportsPage() {
             }
         } catch (error) {
             toast.error("Failed to fetch devices");
+        }
+    };
+
+    const fetchPetanis = async () => {
+        try {
+            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/petani`);
+            const data = await res.json();
+            if (data.success) {
+                setPetanis(data.data.petani || data.data); // Adjust based on API structure
+            }
+        } catch (error) {
+            console.error("Failed to fetch petanis");
         }
     };
 
@@ -65,6 +80,20 @@ export default function ReportsPage() {
                             <option value="">Choose Device...</option>
                             {devices.map((d) => (
                                 <option key={d.id} value={d.id}>{d.name}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Select Farmer (Optional)</label>
+                        <select
+                            value={filters.petaniId}
+                            onChange={(e) => setFilters({ ...filters, petaniId: e.target.value })}
+                            className="w-full border rounded-md px-3 py-2 text-sm"
+                        >
+                            <option value="">All Farmers</option>
+                            {petanis.map((p) => (
+                                <option key={p.id} value={p.id}>{p.nama}</option>
                             ))}
                         </select>
                     </div>

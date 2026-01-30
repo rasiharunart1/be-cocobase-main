@@ -62,6 +62,16 @@ const dashboardAtas = async (req, res, next) => {
 
     const peningkatanJumlahProduk = packingLogBulanIni - packingLogBulanSebelumnya;
 
+    // Mengambil data produk terjual (berdasarkan Transaksi)
+    const [totalTerjualAgg, terjualBulanIni, terjualBulanSebelumnya] = await Promise.all([
+      prisma.transaksi.aggregate({ _sum: { jumlah: true } }),
+      getProdukByMonth(0),
+      getProdukByMonth(-1),
+    ]);
+
+    const totalTerjual = totalTerjualAgg._sum.jumlah || 0;
+    const peningkatanPenjualan = terjualBulanIni - terjualBulanSebelumnya;
+
     // Mengambil data cocoblog
     const [cocoblogTotal, cocoblogBulanIni, cocoblogBulanSebelumnya] = await Promise.all([
       prisma.cocoblog.aggregate({ _count: { id: true } }),
@@ -74,10 +84,20 @@ const dashboardAtas = async (req, res, next) => {
       _count: { status: true },
     });
 
+    // Get real packing logs from IoT
+    const totalPackingLogs = await prisma.packingLog.count();
+
     const jumlahDataDiayak = statusCounts.find((s) => s.status === STATUS.DIAYAK)?._count.status || 0;
     const jumlahDataDioven = statusCounts.find((s) => s.status === STATUS.DIOVEN)?._count.status || 0;
     const jumlahDataDisortir = statusCounts.find((s) => s.status === STATUS.DISORTIR)?._count.status || 0;
+
+    // Use IoT data for "Dikemas" count
+    // REVERTED: Now using manual count again as per request
     const jumlahDataDikemas = statusCounts.find((s) => s.status === STATUS.DIKEMAS)?._count.status || 0;
+
+    // New variable for IoT packing count
+    const jumlahKemasMesin = totalPackingLogs;
+
     const jumlahDataSelesai = statusCounts.find((s) => s.status === STATUS.SELESAI)?._count.status || 0;
 
     const totalData = jumlahDataDiayak + jumlahDataDioven + jumlahDataDisortir + jumlahDataDikemas + jumlahDataSelesai;
@@ -92,8 +112,8 @@ const dashboardAtas = async (req, res, next) => {
       },
       {
         nama: "produk",
-        nilai: peningkatanJumlahProduk,
-        value: packingLogTotal,
+        nilai: peningkatanPenjualan,
+        value: totalTerjual,
       },
 
       {
@@ -128,6 +148,10 @@ const dashboardAtas = async (req, res, next) => {
       {
         nama: "presentase",
         nilai: persentaseSelesai,
+      },
+      {
+        nama: "kemas_mesin",
+        nilai: jumlahKemasMesin,
       },
     ];
 

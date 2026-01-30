@@ -15,16 +15,24 @@ export async function getData({
   status?: string;
 }) {
   const token = (await cookies()).get("token");
-  const res = await fetch(
-    `${process.env.NEXT_PUBLIC_API_URL}${path}?search=${search}&status=${status}&page=${currentPage}&limit=${limit}`,
-    {
-      cache: "no-store",
-      headers: {
-        Authorization: `Bearer ${token?.value}`,
-        "Content-Type": "application/json",
-      },
-    }
-  );
+
+  // Construct query parameters, filtering out undefined/null/empty string values
+  const queryParams = new URLSearchParams();
+  if (search) queryParams.append("search", search);
+  if (status) queryParams.append("status", status);
+  if (currentPage) queryParams.append("page", currentPage.toString());
+  if (limit) queryParams.append("limit", limit.toString());
+
+  const queryString = queryParams.toString();
+  const url = `${process.env.NEXT_PUBLIC_API_URL}${path}${queryString ? `?${queryString}` : ""}`;
+
+  const res = await fetch(url, {
+    cache: "no-store",
+    headers: {
+      Authorization: `Bearer ${token?.value}`,
+      "Content-Type": "application/json",
+    },
+  });
 
   // if (!res.ok) {
   //   throw new Error(`HTTP error! status: ${res.status}`);
@@ -63,7 +71,7 @@ export async function getDataNoQuery({
 
   const data = await res.json();
   // console.log(data);
-  
+
 
   // await new Promise((resolve) => setTimeout(resolve, 8000));  
 

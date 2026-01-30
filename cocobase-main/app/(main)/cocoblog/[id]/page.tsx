@@ -1,7 +1,7 @@
 import type { Metadata, ResolvingMetadata } from "next";
 import { getData } from "@/app/utils/fetchData";
 import Image from "next/image";
-import { Footer, Chat } from "@/app/(main)/page";
+import { Footer, Chat } from "@/app/(main)/HomeView";
 import DOMPurify from "isomorphic-dompurify";
 
 type Props = {
