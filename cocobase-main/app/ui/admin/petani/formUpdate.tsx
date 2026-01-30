@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Icon from "@mdi/react";
-import { mdiMapMarker, mdiAccount, mdiPhone } from "@mdi/js";
+import { mdiMapMarker, mdiAccount, mdiPhone, mdiLock } from "@mdi/js";
 import { Button } from "../button";
 import { useFormStatus } from "react-dom";
 import { formSubmitHandlerPetani } from "@/app/utils/actions";
@@ -60,9 +60,8 @@ export default function TableUpdate({ id }: { id: string }) {
             </label>
             <div className="relative">
               <input
-                className={`peer block w-full rounded-md border border-gray-200 py-[9px] pl-10 text-sm outline-2 placeholder:text-gray-500 ${
-                  errors.nama ? "border-red-500" : ""
-                }`}
+                className={`peer block w-full rounded-md border border-gray-200 py-[9px] pl-10 text-sm outline-2 placeholder:text-gray-500 ${errors.nama ? "border-red-500" : ""
+                  }`}
                 id="nama"
                 type="text"
                 name="nama"
@@ -81,6 +80,33 @@ export default function TableUpdate({ id }: { id: string }) {
               <p className="text-red-500 text-sm mt-1">{errors.nama}</p>
             )}
           </div>
+          <div>
+            <label
+              className="mb-3 mt-5 block text-xs font-medium text-gray-900"
+              htmlFor="password"
+            >
+              Password (Optional)
+            </label>
+            <div className="relative">
+              <input
+                className={`peer block w-full rounded-md border border-gray-200 py-[9px] pl-10 text-sm outline-2 placeholder:text-gray-500 ${errors.password ? "border-red-500" : ""
+                  }`}
+                id="password"
+                type="password"
+                name="password"
+                placeholder="Kosongkan jika tidak ingin mengubah password"
+              />
+              <Icon
+                path={mdiLock}
+                size={1}
+                color="black"
+                className="pointer-events-none absolute left-3 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-gray-500 peer-focus:text-gray-900"
+              />
+            </div>
+            {errors.password && (
+              <p className="text-red-500 text-sm mt-1">{errors.password}</p>
+            )}
+          </div>
           <div className="flex flex-row gap-3">
             <div>
               <label
@@ -91,9 +117,8 @@ export default function TableUpdate({ id }: { id: string }) {
               </label>
               <div className="relative">
                 <input
-                  className={`peer block w-full rounded-md border border-gray-200 py-[9px] pl-10 text-sm outline-2 placeholder:text-gray-500 ${
-                    errors.RT ? "border-red-500" : ""
-                  }`}
+                  className={`peer block w-full rounded-md border border-gray-200 py-[9px] pl-10 text-sm outline-2 placeholder:text-gray-500 ${errors.RT ? "border-red-500" : ""
+                    }`}
                   id="RT"
                   type="number"
                   name="RT"
@@ -122,9 +147,8 @@ export default function TableUpdate({ id }: { id: string }) {
               </label>
               <div className="relative">
                 <input
-                  className={`peer block w-full rounded-md border border-gray-200 py-[9px] pl-10 text-sm outline-2 placeholder:text-gray-500 ${
-                    errors.RW ? "border-red-500" : ""
-                  }`}
+                  className={`peer block w-full rounded-md border border-gray-200 py-[9px] pl-10 text-sm outline-2 placeholder:text-gray-500 ${errors.RW ? "border-red-500" : ""
+                    }`}
                   id="RW"
                   type="number"
                   name="RW"
@@ -153,9 +177,8 @@ export default function TableUpdate({ id }: { id: string }) {
             </label>
             <div className="relative">
               <input
-                className={`peer block w-full rounded-md border border-gray-200 py-[9px] pl-10 text-sm outline-2 placeholder:text-gray-500 ${
-                  errors.alamat ? "border-red-500" : ""
-                }`}
+                className={`peer block w-full rounded-md border border-gray-200 py-[9px] pl-10 text-sm outline-2 placeholder:text-gray-500 ${errors.alamat ? "border-red-500" : ""
+                  }`}
                 id="alamat"
                 type="text"
                 name="alamat"
@@ -183,9 +206,8 @@ export default function TableUpdate({ id }: { id: string }) {
             </label>
             <div className="relative">
               <input
-                className={`peer block w-full rounded-md border border-gray-200 py-[9px] pl-10 text-sm outline-2 placeholder:text-gray-500 ${
-                  errors.telepon ? "border-red-500" : ""
-                }`}
+                className={`peer block w-full rounded-md border border-gray-200 py-[9px] pl-10 text-sm outline-2 placeholder:text-gray-500 ${errors.telepon ? "border-red-500" : ""
+                  }`}
                 id="telepon"
                 type="number"
                 name="telepon"

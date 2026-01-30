@@ -8,6 +8,7 @@ const links = [
   { name: "Beranda", href: "/" },
 
   { name: "Cocoblog", href: "/cocoblog" },
+  { name: "Login Petani", href: "/petani/login" },
   { name: "Login Admin", href: "/auth/login" },
   { name: "Register Admin", href: "/auth/register" },
 ];

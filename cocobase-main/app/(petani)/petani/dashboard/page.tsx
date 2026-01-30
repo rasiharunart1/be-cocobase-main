@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import Icon from "@mdi/react";
 import { mdiWeightKilogram, mdiPackageVariantClosed, mdiTrophy, mdiHistory, mdiLogout, mdiAccountCircle } from "@mdi/js";
 
@@ -50,13 +51,15 @@ export default function PetaniDashboard() {
             <div className="bg-green-600 text-white p-6 pb-24 rounded-b-[3rem] shadow-xl">
                 <div className="flex justify-between items-center max-w-4xl mx-auto">
                     <div className="flex items-center gap-3">
-                        <div className="bg-white/20 p-2 rounded-full backdrop-blur-sm">
-                            <Icon path={mdiAccountCircle} size={1.5} />
-                        </div>
-                        <div>
-                            <p className="text-green-100 text-xs uppercase font-bold tracking-wider">Welcome back,</p>
-                            <h1 className="text-2xl font-black">{user?.nama}</h1>
-                        </div>
+                        <Link href="/petani/profile" className="flex items-center gap-3 hover:opacity-80 transition group">
+                            <div className="bg-white/20 p-2 rounded-full backdrop-blur-sm group-hover:bg-white/30 transition">
+                                <Icon path={mdiAccountCircle} size={1.5} />
+                            </div>
+                            <div>
+                                <p className="text-green-100 text-xs uppercase font-bold tracking-wider">Welcome back,</p>
+                                <h1 className="text-2xl font-black underline decoration-green-400/50 underline-offset-4 decoration-2">{user?.nama}</h1>
+                            </div>
+                        </Link>
                     </div>
                     <button
                         onClick={handleLogout}

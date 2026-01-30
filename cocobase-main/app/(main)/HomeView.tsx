@@ -76,12 +76,20 @@ const Home = () => {
                         Jelajahi manfaat alami gula kelapa, pilihan terbaik untuk gaya hidup
                         sehat Anda.
                     </p>
-                    <Link
-                        href={"#about"}
-                        className="bg-[#E37D2E] text-white px-6 py-3 rounded-lg shadow hover:bg-[#bb6727] transition duration-300"
-                    >
-                        Jelajahi
-                    </Link>
+                    <div className="flex gap-4">
+                        <Link
+                            href={"#about"}
+                            className="bg-[#E37D2E] text-white px-6 py-3 rounded-lg shadow hover:bg-[#bb6727] transition duration-300"
+                        >
+                            Jelajahi
+                        </Link>
+                        <Link
+                            href={"/petani/login"}
+                            className="border-2 border-[#E37D2E] text-[#E37D2E] px-6 py-3 rounded-lg shadow hover:bg-[#E37D2E] hover:text-white transition duration-300 font-semibold"
+                        >
+                            Portal Petani
+                        </Link>
+                    </div>
                 </div>
                 <div className="">
                     <Image

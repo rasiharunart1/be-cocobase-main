@@ -27,14 +27,14 @@ app.use(
   swaggerUi.setup(swaggerDocument, {
     customCssUrl: 'https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/4.15.5/swagger-ui.min.css',
     customJs: ['https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/4.15.5/swagger-ui-bundle.js', 'https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/4.15.5/swagger-ui-standalone-preset.js'],
-    customSiteTitle: 'CourseHub API Documentation 🚀',
+    customSiteTitle: 'Cocobase API Documentation 🚀',
   })
 );
 app.use('/api/v1', require('./routes/index.route'));
 app.get('/', (req, res) => {
   res.json({
     success: true,
-    message: 'Welcome to CourseHub API 🚀',
+    message: 'Welcome to Cocobase API 🚀',
     documentation: '/docs',
     version: '1.0.0'
   });
