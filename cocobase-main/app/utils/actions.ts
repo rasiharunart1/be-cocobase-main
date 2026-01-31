@@ -62,7 +62,7 @@ export async function SignOut() {
     await signOut();
     window.location.href = "/admin";
   } catch (error) {
-    toast.error("Register gagal!");
+    toast.error("Logout gagal!");
     return { success: false, message: "Authentication failed" };
   }
 }

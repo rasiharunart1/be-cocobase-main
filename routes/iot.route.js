@@ -4,13 +4,15 @@ const {
   getPackingLogs,
   ingestData,
   deletePackingLog,
-  resetDeviceLogs
+  resetDeviceLogs,
+  verifyPacking
 } = require('../controllers/iot.controller.js');
 
 router.get('/loadcell/:deviceId', getLatestLoadcellReading);
 router.get('/loadcell/latest/:deviceId', getLatestLoadcellReading);
 router.get('/loadcell/logs/:deviceId', getPackingLogs);
 router.post('/loadcell/ingest', ingestData);
+router.post('/logs/verify/:id', verifyPacking);
 
 // Log Management Routes
 router.delete('/logs/:id', deletePackingLog);

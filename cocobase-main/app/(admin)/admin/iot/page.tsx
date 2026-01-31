@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { getData } from "@/app/utils/fetchData";
 import { toast } from "react-toastify";
 import Icon from "@mdi/react";
-import { mdiDevices, mdiWeightKilogram, mdiCog, mdiHistory, mdiTrashCan, mdiRefresh, mdiCounter, mdiScaleBalance } from "@mdi/js";
+import { mdiDevices, mdiWeightKilogram, mdiCog, mdiHistory, mdiTrashCan, mdiRefresh, mdiCounter, mdiScaleBalance, mdiCheckDecagram, mdiAccountPlus } from "@mdi/js";
 
 export default function IoTDashboard() {
     const [weight, setWeight] = useState<number>(0);
@@ -171,6 +171,26 @@ export default function IoTDashboard() {
             }
         } catch (error) {
             toast.error("Update failed");
+        }
+    };
+
+    const handleVerifyLog = async (logId: number, petaniId: number) => {
+        if (!petaniId) return;
+        try {
+            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/iot/logs/verify/${logId}`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ petaniId }),
+            });
+            const data = await res.json();
+            if (data.success) {
+                toast.success("Log verified and assigned!");
+                fetchLogs(selectedDevice.id);
+            } else {
+                toast.error(data.message || "Verification failed");
+            }
+        } catch (error) {
+            toast.error("Network error during verification");
         }
     };
 
@@ -446,13 +466,27 @@ export default function IoTDashboard() {
                                         <td className="px-6 py-4 text-xs">
                                             <span className="bg-green-50 text-green-600 px-3 py-1 rounded-full font-bold border border-green-100 uppercase tracking-tighter">Success</span>
                                         </td>
-                                        <td className="px-6 py-4 text-center">
+                                        <td className="px-6 py-4 flex items-center justify-center gap-2">
+                                            {!log.petani && (
+                                                <div className="flex items-center gap-1">
+                                                    <select
+                                                        onChange={(e) => handleVerifyLog(log.id, parseInt(e.target.value))}
+                                                        className="text-[10px] border border-blue-200 rounded px-1 py-1 bg-blue-50 text-blue-700 outline-none font-bold uppercase transition-all hover:bg-blue-100"
+                                                        defaultValue=""
+                                                    >
+                                                        <option value="" disabled>Assign Farmer...</option>
+                                                        {petanis.map(p => (
+                                                            <option key={p.id} value={p.id}>{p.nama}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                            )}
                                             <button
                                                 onClick={() => handleDeleteLog(log.id)}
-                                                className="text-gray-300 hover:text-red-500 transition-colors"
+                                                className="text-gray-300 hover:text-red-500 transition-colors p-1"
                                                 title="Delete Log"
                                             >
-                                                <Icon path={mdiTrashCan} size={0.8} />
+                                                <Icon path={mdiTrashCan} size={0.7} />
                                             </button>
                                         </td>
                                     </tr>

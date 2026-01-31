@@ -155,30 +155,76 @@ const dashboardAtas = async (req, res, next) => {
       },
     ];
 
-    // Get Top Farmers Leaderboard (Top 5)
-    const leaderboard = await prisma.packingLog.groupBy({
+    // Get All Farmers for Performance Matrix
+    const allPetani = await prisma.petani.findMany({
+      select: { id: true, nama: true }
+    });
+
+    // Get IoT Packing Stats Per Farmer (including Unassigned)
+    const iotStatsPerPetani = await prisma.packingLog.groupBy({
       by: ['petaniId'],
       _count: { id: true },
       _sum: { weight: true },
-      where: { petaniId: { not: null } },
-      orderBy: { _sum: { weight: 'desc' } },
-      take: 5,
     });
 
-    const topFarmers = await Promise.all(
-      leaderboard.map(async (entry, index) => {
-        const petani = await prisma.petani.findUnique({
-          where: { id: entry.petaniId },
-          select: { id: true, nama: true }
-        });
-        return {
-          rank: index + 1,
-          nama: petani?.nama || "Unknown",
-          totalWeight: entry._sum.weight,
-          totalPacking: entry._count.id,
-        };
-      })
-    );
+    // Get Production Progress Per Farmer
+    const productionStatsPerPetani = await prisma.produksi.groupBy({
+      by: ['id_petani', 'status'],
+      _count: { status: true },
+    });
+
+    const petaniPerformance = allPetani.map(p => {
+      const iot = iotStatsPerPetani.find(s => s.petaniId === p.id);
+      const prod = productionStatsPerPetani.filter(s => s.id_petani === p.id);
+
+      return {
+        id: p.id,
+        nama: p.nama,
+        iotWeight: iot?._sum.weight || 0,
+        iotPackCount: iot?._count.id || 0,
+        stages: {
+          diayak: prod.find(s => s.status === STATUS.DIAYAK)?._count.status || 0,
+          dioven: prod.find(s => s.status === STATUS.DIOVEN)?._count.status || 0,
+          disortir: prod.find(s => s.status === STATUS.DISORTIR)?._count.status || 0,
+          dikemas: prod.find(s => s.status === STATUS.DIKEMAS)?._count.status || 0,
+          selesai: prod.find(s => s.status === STATUS.SELESAI)?._count.status || 0,
+        }
+      };
+    });
+
+    // Handle Unassigned Logs
+    const unassignedIot = iotStatsPerPetani.find(s => s.petaniId === null);
+    if (unassignedIot) {
+      petaniPerformance.push({
+        id: 0,
+        nama: "Unassigned/Antrian IoT",
+        iotWeight: unassignedIot._sum.weight || 0,
+        iotPackCount: unassignedIot._count.id || 0,
+        stages: { diayak: 0, dioven: 0, disortir: 0, dikemas: 0, selesai: 0 }
+      });
+    }
+
+    // Top 5 based on IoT Weight
+    const topFarmers = [...petaniPerformance]
+      .filter(p => p.id !== 0) // Exclude unassigned from leaderboard
+      .sort((a, b) => b.iotWeight - a.iotWeight)
+      .slice(0, 5)
+      .map((p, index) => ({
+        rank: index + 1,
+        nama: p.nama,
+        totalWeight: p.iotWeight,
+        totalPacking: p.iotPackCount,
+      }));
+
+    // Recent IoT Activities
+    const recentActivities = await prisma.packingLog.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: 5,
+      include: {
+        petani: { select: { nama: true } },
+        device: { select: { name: true } }
+      }
+    });
 
     // Get Overall Weight Stats
     const weightAgg = await prisma.packingLog.aggregate({
@@ -195,7 +241,7 @@ const dashboardAtas = async (req, res, next) => {
       success: true,
       message: "OK",
       err: null,
-      data: { atas, kanan, topFarmers, totalWeightStats },
+      data: { atas, kanan, topFarmers, totalWeightStats, petaniPerformance, recentActivities },
     });
   } catch (err) {
     next(err);

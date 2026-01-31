@@ -171,10 +171,36 @@ const resetDeviceLogs = async (req, res, next) => {
   }
 };
 
+const verifyPacking = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { petaniId } = req.body;
+
+    if (!petaniId) {
+      return res.status(400).json({ success: false, message: "Petani ID is required" });
+    }
+
+    const log = await prisma.packingLog.update({
+      where: { id: parseInt(id) },
+      data: { petaniId: parseInt(petaniId) },
+      include: { petani: true }
+    });
+
+    res.status(200).json({
+      success: true,
+      message: "Packing log verified and assigned successfully",
+      data: log
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
   getPackingLogs,
   getLatestLoadcellReading,
   ingestData,
   deletePackingLog,
-  resetDeviceLogs
+  resetDeviceLogs,
+  verifyPacking
 };
