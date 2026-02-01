@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import { toast } from "react-toastify";
 import Icon from "@mdi/react";
 import { mdiFilePdfBox, mdiFilterVariant } from "@mdi/js";
-import { getData } from "@/app/utils/fetchData";
 
 export default function ReportsPage() {
     const [devices, setDevices] = useState<any[]>([]);
@@ -39,12 +38,30 @@ export default function ReportsPage() {
 
     const fetchPetanis = async () => {
         try {
-            const data = await getData({ path: "/petani", limit: 1000 });
-            if (data && data.petani) {
-                setPetanis(data.petani);
+            const token = localStorage.getItem("token");
+            if (!token) {
+                console.warn("No token found in localStorage");
+                return;
+            }
+
+            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/petani?limit=1000`, {
+                headers: {
+                    "Authorization": `Bearer ${token}`,
+                    "Content-Type": "application/json",
+                }
+            });
+
+            const data = await res.json();
+            if (data.success) {
+                // Ensure we access the array of farmers correctly. 
+                // Based on controller: data.data.petani
+                const farmerList = data.data.petani || data.data;
+                setPetanis(Array.isArray(farmerList) ? farmerList : []);
+            } else {
+                console.error("API returned success: false", data);
             }
         } catch (error) {
-            console.error("Failed to fetch petanis");
+            console.error("Failed to fetch petanis", error);
         }
     };
 
