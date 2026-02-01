@@ -4,10 +4,12 @@ import { useState, useEffect } from "react";
 import { toast } from "react-toastify";
 import Icon from "@mdi/react";
 import { mdiFilePdfBox, mdiFilterVariant } from "@mdi/js";
+import { getData } from "@/app/utils/fetchData";
 
 export default function ReportsPage() {
     const [devices, setDevices] = useState<any[]>([]);
     const [petanis, setPetanis] = useState<any[]>([]);
+    const [loadingPetanis, setLoadingPetanis] = useState(false);
     const [filters, setFilters] = useState({
         deviceId: "",
         petaniId: "",
@@ -37,38 +39,33 @@ export default function ReportsPage() {
     };
 
     const fetchPetanis = async () => {
+        console.log("[REPORTS] Starting fetchPetanis...");
+        setLoadingPetanis(true);
+
         try {
-            const token = localStorage.getItem("token");
-            if (!token) {
-                console.error("No authentication token found");
-                toast.error("Sesi tidak ditemukan. Silakan login kembali.");
-                return;
-            }
+            // Try using getData (server action) like IoT page
+            console.log("[REPORTS] Calling getData with path=/petani, limit=100");
+            const data = await getData({ path: "/petani", limit: 100 });
 
-            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/petani?limit=100`, {
-                headers: {
-                    "Authorization": `Bearer ${token}`,
-                    "Content-Type": "application/json",
-                }
-            });
+            console.log("[REPORTS] getData returned:", data);
+            console.log("[REPORTS] Type of data:", typeof data);
+            console.log("[REPORTS] data.petani exists?", data?.petani !== undefined);
 
-            if (!res.ok) {
-                if (res.status === 401) {
-                    toast.error("Sesi expired. Silakan login kembali.");
-                }
-                console.error("Failed to fetch petanis:", res.status);
-                return;
-            }
-
-            const data = await res.json();
-            if (data.success && data.data && data.data.petani) {
-                setPetanis(data.data.petani);
+            if (data && data.petani) {
+                console.log("[REPORTS] Found petani array, length:", data.petani.length);
+                console.log("[REPORTS] First 3 items:", data.petani.slice(0, 3));
+                setPetanis(data.petani);
+                toast.success(`Berhasil memuat ${data.petani.length} petani`);
             } else {
-                console.error("Invalid response structure:", data);
+                console.error("[REPORTS] No petani data in response. Full data:", JSON.stringify(data));
+                toast.warning("Tidak ada data petani ditemukan");
             }
         } catch (error) {
-            console.error("Failed to fetch petanis:", error);
-            toast.error("Gagal memuat data petani");
+            console.error("[REPORTS] Error fetching petanis:", error);
+            toast.error("Gagal memuat data petani: " + (error as Error).message);
+        } finally {
+            setLoadingPetanis(false);
+            console.log("[REPORTS] fetchPetanis complete. Current petanis state length:", petanis.length);
         }
     };
 
