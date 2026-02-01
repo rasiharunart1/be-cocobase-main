@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { toast } from "react-toastify";
 import Icon from "@mdi/react";
 import { mdiFilePdfBox, mdiFilterVariant } from "@mdi/js";
+import { getData } from "@/app/utils/fetchData";
 
 export default function ReportsPage() {
     const [devices, setDevices] = useState<any[]>([]);
@@ -38,10 +39,9 @@ export default function ReportsPage() {
 
     const fetchPetanis = async () => {
         try {
-            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/petani`);
-            const data = await res.json();
-            if (data.success) {
-                setPetanis(data.data.petani || data.data); // Adjust based on API structure
+            const data = await getData({ path: "/petani", limit: 1000 });
+            if (data && data.petani) {
+                setPetanis(data.petani);
             }
         } catch (error) {
             console.error("Failed to fetch petanis");
