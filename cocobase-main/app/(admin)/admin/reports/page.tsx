@@ -39,21 +39,12 @@ export default function ReportsPage() {
 
     const fetchPetanis = async () => {
         try {
-            console.log("Fetching petanis...");
-            const data = await getData({ path: "/petani", limit: 1000 });
-            console.log("Petanis data:", data);
-
+            const data = await getData({ path: "/petani", limit: 100 });
             if (data && data.petani) {
                 setPetanis(data.petani);
-            } else {
-                console.warn("No petani data found or unauthorized");
-                if (data === null || data === undefined) {
-                    toast.error("Gagal memuat data petani. Sesi mungkin habis, silakan login ulang.");
-                }
             }
         } catch (error) {
-            console.error("Failed to fetch petanis", error);
-            toast.error("Terjadi kesalahan saat memuat data petani.");
+            console.error("Failed to fetch petanis");
         }
     };
 
