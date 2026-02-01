@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { toast } from "react-toastify";
 import Icon from "@mdi/react";
 import { mdiFilePdfBox, mdiFilterVariant } from "@mdi/js";
-import { getData } from "@/app/utils/fetchData";
+import { fetchPetanisFromDB } from "./actions";
 
 export default function ReportsPage() {
     const [devices, setDevices] = useState<any[]>([]);
@@ -39,33 +39,27 @@ export default function ReportsPage() {
     };
 
     const fetchPetanis = async () => {
-        console.log("[REPORTS] Starting fetchPetanis...");
+        console.log("[REPORTS] Fetching petanis directly from database...");
         setLoadingPetanis(true);
 
         try {
-            // Try using getData (server action) like IoT page
-            console.log("[REPORTS] Calling getData with path=/petani, limit=100");
-            const data = await getData({ path: "/petani", limit: 100 });
+            const result = await fetchPetanisFromDB();
 
-            console.log("[REPORTS] getData returned:", data);
-            console.log("[REPORTS] Type of data:", typeof data);
-            console.log("[REPORTS] data.petani exists?", data?.petani !== undefined);
+            console.log("[REPORTS] Database result:", result);
 
-            if (data && data.petani) {
-                console.log("[REPORTS] Found petani array, length:", data.petani.length);
-                console.log("[REPORTS] First 3 items:", data.petani.slice(0, 3));
-                setPetanis(data.petani);
-                toast.success(`Berhasil memuat ${data.petani.length} petani`);
+            if (result.success && result.data) {
+                console.log("[REPORTS] Found", result.data.length, "petani");
+                setPetanis(result.data);
+                toast.success(`Berhasil memuat ${result.data.length} petani dari database`);
             } else {
-                console.error("[REPORTS] No petani data in response. Full data:", JSON.stringify(data));
-                toast.warning("Tidak ada data petani ditemukan");
+                console.error("[REPORTS] Failed to fetch from database:", result.error);
+                toast.error("Gagal memuat data petani dari database");
             }
         } catch (error) {
-            console.error("[REPORTS] Error fetching petanis:", error);
-            toast.error("Gagal memuat data petani: " + (error as Error).message);
+            console.error("[REPORTS] Error:", error);
+            toast.error("Terjadi kesalahan: " + (error as Error).message);
         } finally {
             setLoadingPetanis(false);
-            console.log("[REPORTS] fetchPetanis complete. Current petanis state length:", petanis.length);
         }
     };
 
