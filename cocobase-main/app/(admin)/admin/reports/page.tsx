@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import { toast } from "react-toastify";
 import Icon from "@mdi/react";
 import { mdiFilePdfBox, mdiFilterVariant } from "@mdi/js";
-import { getData } from "@/app/utils/fetchData";
 
 export default function ReportsPage() {
     const [devices, setDevices] = useState<any[]>([]);
@@ -39,12 +38,37 @@ export default function ReportsPage() {
 
     const fetchPetanis = async () => {
         try {
-            const data = await getData({ path: "/petani", limit: 100 });
-            if (data && data.petani) {
-                setPetanis(data.petani);
+            const token = localStorage.getItem("token");
+            if (!token) {
+                console.error("No authentication token found");
+                toast.error("Sesi tidak ditemukan. Silakan login kembali.");
+                return;
+            }
+
+            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/petani?limit=100`, {
+                headers: {
+                    "Authorization": `Bearer ${token}`,
+                    "Content-Type": "application/json",
+                }
+            });
+
+            if (!res.ok) {
+                if (res.status === 401) {
+                    toast.error("Sesi expired. Silakan login kembali.");
+                }
+                console.error("Failed to fetch petanis:", res.status);
+                return;
+            }
+
+            const data = await res.json();
+            if (data.success && data.data && data.data.petani) {
+                setPetanis(data.data.petani);
+            } else {
+                console.error("Invalid response structure:", data);
             }
         } catch (error) {
-            console.error("Failed to fetch petanis");
+            console.error("Failed to fetch petanis:", error);
+            toast.error("Gagal memuat data petani");
         }
     };
 
