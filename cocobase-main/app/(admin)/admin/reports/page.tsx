@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { toast } from "react-toastify";
 import Icon from "@mdi/react";
 import { mdiFilePdfBox, mdiFilterVariant } from "@mdi/js";
+import { getData } from "@/app/utils/fetchData";
 
 export default function ReportsPage() {
     const [devices, setDevices] = useState<any[]>([]);
@@ -38,30 +39,21 @@ export default function ReportsPage() {
 
     const fetchPetanis = async () => {
         try {
-            const token = localStorage.getItem("token");
-            if (!token) {
-                console.warn("No token found in localStorage");
-                return;
-            }
+            console.log("Fetching petanis...");
+            const data = await getData({ path: "/petani", limit: 1000 });
+            console.log("Petanis data:", data);
 
-            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/petani?limit=1000`, {
-                headers: {
-                    "Authorization": `Bearer ${token}`,
-                    "Content-Type": "application/json",
-                }
-            });
-
-            const data = await res.json();
-            if (data.success) {
-                // Ensure we access the array of farmers correctly. 
-                // Based on controller: data.data.petani
-                const farmerList = data.data.petani || data.data;
-                setPetanis(Array.isArray(farmerList) ? farmerList : []);
+            if (data && data.petani) {
+                setPetanis(data.petani);
             } else {
-                console.error("API returned success: false", data);
+                console.warn("No petani data found or unauthorized");
+                if (data === null || data === undefined) {
+                    toast.error("Gagal memuat data petani. Sesi mungkin habis, silakan login ulang.");
+                }
             }
         } catch (error) {
             console.error("Failed to fetch petanis", error);
+            toast.error("Terjadi kesalahan saat memuat data petani.");
         }
     };
 
