@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import { toast } from "react-toastify";
 import Icon from "@mdi/react";
 import { mdiFilePdfBox, mdiFilterVariant } from "@mdi/js";
-import { fetchPetanisFromDB } from "./actions";
 
 export default function ReportsPage() {
     const [devices, setDevices] = useState<any[]>([]);
@@ -18,10 +17,24 @@ export default function ReportsPage() {
         end: "",
     });
 
-    useEffect(() => {
-        fetchDevices();
-        fetchPetanis();
-    }, []);
+    const fetchPetanis = async () => {
+        try {
+            const token = localStorage.getItem("token");
+            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/petani?limit=100`, {
+                headers: {
+                    "Authorization": `Bearer ${token}`,
+                    "Content-Type": "application/json"
+                }
+            });
+            const data = await res.json();
+            if (data.success && data.petani) {
+                setPetanis(data.petani);
+            }
+        } catch (error) {
+            console.error("Failed to fetch petanis", error);
+            toast.error("Gagal memuat data petani");
+        }
+    };
 
     const fetchDevices = async () => {
         try {
@@ -38,30 +51,11 @@ export default function ReportsPage() {
         }
     };
 
-    const fetchPetanis = async () => {
-        console.log("[REPORTS] Fetching petanis directly from database...");
-        setLoadingPetanis(true);
 
-        try {
-            const result = await fetchPetanisFromDB();
-
-            console.log("[REPORTS] Database result:", result);
-
-            if (result.success && result.data) {
-                console.log("[REPORTS] Found", result.data.length, "petani");
-                setPetanis(result.data);
-                toast.success(`Berhasil memuat ${result.data.length} petani dari database`);
-            } else {
-                console.error("[REPORTS] Failed to fetch from database:", result.error);
-                toast.error("Gagal memuat data petani dari database");
-            }
-        } catch (error) {
-            console.error("[REPORTS] Error:", error);
-            toast.error("Terjadi kesalahan: " + (error as Error).message);
-        } finally {
-            setLoadingPetanis(false);
-        }
-    };
+    useEffect(() => {
+        fetchDevices();
+        fetchPetanis();
+    }, []);
 
     const handleDownload = () => {
         if (!filters.deviceId) {

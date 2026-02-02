@@ -9,10 +9,10 @@ export async function setCookiesToken(token: string) {
       name: "token",
       value: token,
       httpOnly: true,
-      secure: true,
-      // path: "/auth/login",
+      secure: process.env.NODE_ENV === 'production',
+      path: "/",
       maxAge: 86400,
-      sameSite: "strict",
+      sameSite: "lax",
     });
 
   } catch (error) {
