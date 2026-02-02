@@ -172,6 +172,9 @@ model Device {
   threshold Float    @default(10.0)
   isReady   Boolean  @default(true)
   
+  pendingCommand    String?  // JSON string for pending commands e.g. {"type": "TARE"}
+  calibrationFactor Float    @default(2280.0)
+  
   readings  LoadcellReading[]
   logs      PackingLog[]
   sessions  DeviceSession[]

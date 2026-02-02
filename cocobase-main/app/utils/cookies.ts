@@ -3,6 +3,7 @@
 import { cookies } from "next/headers";
 
 export async function setCookiesToken(token: string) {
+  console.log("[DEBUG] Setting cookie token:", token ? "Token present" : "Token empty");
   try {
     (await cookies()).set({
       name: "token",
@@ -22,7 +23,7 @@ export async function setCookiesToken(token: string) {
 export async function getCookiesToken() {
   try {
     const token = (await cookies()).get("token");
-    console.log(token, "get token");
+    console.log("[DEBUG] getCookiesToken result:", token ? "Found" : "Missing");
     return token;
   } catch (error) {
     console.log("Get cookies", error);

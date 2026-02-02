@@ -3,7 +3,6 @@ import {
   removeCookiesToken,
 } from "@/app/utils/cookies";
 import { z } from "zod";
-import { NextResponse } from 'next/server';
 
 export const signIn = async (provider: string, data: any) => {
   try {
@@ -27,13 +26,7 @@ export const signIn = async (provider: string, data: any) => {
       if (user.status === 200) {
         const data = await user.json();
 
-        const response = NextResponse.next();
-        response.cookies.set('token', data.token, {
-          path: '/',
-          maxAge: 3600, // 1 jam
-          sameSite: 'strict',
-        });
-
+        // Save token to localStorage (client-side) and cookies (server-action)
         localStorage.setItem("token", data.token);
         await setCookiesToken(data.token);
 
