@@ -6,8 +6,6 @@ export async function fetchPetanisFromDB() {
     try {
         const cookieStore = await cookies();
         const token = cookieStore.get("token")?.value;
-        console.log("[DEBUG] Token from cookies:", token ? `${token.substring(0, 10)}...` : "MISSING");
-
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api/v1";
 
         const headers: HeadersInit = {
