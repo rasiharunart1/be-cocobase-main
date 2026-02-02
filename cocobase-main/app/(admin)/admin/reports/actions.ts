@@ -1,32 +1,22 @@
-"use server";
-
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
-
 export async function fetchPetanisFromDB() {
     try {
-        const petanis = await prisma.petani.findMany({
-            select: {
-                id: true,
-                nama: true,
-                alamat: true,
-                no_hp: true,
-                RT: true,
-                RW: true,
-            },
-            orderBy: {
-                nama: 'asc',
-            },
-            take: 100,
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api/v1";
+        const res = await fetch(`${apiUrl}/petani?limit=100`, {
+            cache: 'no-store'
         });
+
+        const data = await res.json();
+
+        if (!data.success) {
+            throw new Error(data.message || "Failed to fetch from API");
+        }
 
         return {
             success: true,
-            data: petanis,
+            data: data.petani || [], // mapping backend response
         };
     } catch (error) {
-        console.error("Error fetching petanis from DB:", error);
+        console.error("Error fetching petanis from API:", error);
         return {
             success: false,
             data: [],
