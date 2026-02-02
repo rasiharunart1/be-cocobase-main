@@ -21,6 +21,7 @@ const createDevice = async (req, res, next) => {
                 name,
                 token,
                 threshold: threshold ? parseFloat(threshold) : 10.0,
+                calibrationFactor: 2280.0
             },
         });
         res.status(201).json({ success: true, data: device });
@@ -38,6 +39,7 @@ const updateDevice = async (req, res, next) => {
             data: {
                 name,
                 threshold: threshold ? parseFloat(threshold) : undefined,
+                calibrationFactor: req.body.calibrationFactor ? parseFloat(req.body.calibrationFactor) : undefined
             },
         });
         res.status(200).json({ success: true, data: device });

@@ -125,7 +125,56 @@ const ingestData = async (req, res, next) => {
       return res.status(200).json({ success: true, message: "Packing event recorded", alert: true });
     }
 
-    return res.status(200).json({ success: true, message: "Reading recorded" });
+    // Check for pending command
+    let responsePayload = { success: true, message: "Reading recorded" };
+
+    if (device.pendingCommand) {
+      try {
+        const command = JSON.parse(device.pendingCommand);
+        responsePayload.command = command;
+        responsePayload.message = "Command sent to device";
+
+        // Clear pending command after sending
+        await prisma.device.update({
+          where: { id: device.id },
+          data: { pendingCommand: null }
+        });
+      } catch (e) {
+        console.error("Failed to parse pending command", e);
+      }
+    }
+
+    return res.status(200).json(responsePayload);
+  } catch (err) {
+    next(err);
+  }
+};
+
+const sendCommand = async (req, res, next) => {
+  try {
+    const { deviceId } = req.params;
+    const { type, value } = req.body; // type: "TARE" | "CALIBRATE", value: optional
+
+    const command = { type, value };
+
+    // If calibration, also update the stored factor in DB
+    const updateData = {
+      pendingCommand: JSON.stringify(command)
+    };
+
+    if (type === "CALIBRATE" && value) {
+      updateData.calibrationFactor = parseFloat(value);
+    }
+
+    await prisma.device.update({
+      where: { id: parseInt(deviceId) },
+      data: updateData
+    });
+
+    res.status(200).json({
+      success: true,
+      message: `Command ${type} queued for device`
+    });
   } catch (err) {
     next(err);
   }
@@ -202,5 +251,6 @@ module.exports = {
   ingestData,
   deletePackingLog,
   resetDeviceLogs,
-  verifyPacking
+  verifyPacking,
+  sendCommand
 };

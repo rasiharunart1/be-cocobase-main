@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { getData } from "@/app/utils/fetchData";
 import { toast } from "react-toastify";
 import Icon from "@mdi/react";
-import { mdiDevices, mdiWeightKilogram, mdiCog, mdiHistory, mdiTrashCan, mdiRefresh, mdiCounter, mdiScaleBalance, mdiCheckDecagram, mdiAccountPlus } from "@mdi/js";
+import { mdiDevices, mdiWeightKilogram, mdiCog, mdiHistory, mdiTrashCan, mdiRefresh, mdiCounter, mdiScaleBalance, mdiCheckDecagram, mdiAccountPlus, mdiWrench } from "@mdi/js";
 
 export default function IoTDashboard() {
     const [weight, setWeight] = useState<number>(0);
@@ -16,6 +16,10 @@ export default function IoTDashboard() {
     const [petanis, setPetanis] = useState<any[]>([]);
     const [activeSession, setActiveSession] = useState<any>(null);
     const [selectedPetaniId, setSelectedPetaniId] = useState<string>("");
+
+    // Calibration State
+    const [isCalModalOpen, setIsCalModalOpen] = useState(false);
+    const [calKnownWeight, setCalKnownWeight] = useState<number>(0);
 
     useEffect(() => {
         fetchDevices();
@@ -233,6 +237,75 @@ export default function IoTDashboard() {
         }
     };
 
+    const handleCalibrationCommand = async (type: "TARE" | "CALIBRATE", value?: number) => {
+        if (!selectedDevice) return;
+
+        try {
+            const payload: any = { type };
+            if (type === "CALIBRATE") {
+                if (!value || value <= 0) {
+                    toast.error("Please enter a valid weight");
+                    return;
+                }
+                // Calculate new factor based on current reading
+                // Formula: newFactor = (rawWeight / knownWeight) * currentFactor
+                // BUT: Since we don't have rawWeight handy, we rely on the device to do the math?
+                // Actually my firmware logic for "CALIBRATE" expects a VALUE = NEW FACTOR.
+                // Uh oh, the firmware I wrote expects "value" to be the NEW FACTOR.
+                // "float newFactor = cmd["value"];"
+
+                // So the Frontend needs to calculate the new factor?
+                // Or the Firmware should be smarter?
+                // The README said: "Gunakan rumus: FaktorBaru = (BeratTerbaca / BeratAsli) * FaktorLama"
+                // Ideally the frontend does this math.
+
+                // Get current factor (we need to fetch it from device details?)
+                // The device object has 'calibrationFactor' in DB? Yes I added it.
+                // But selectedDevice might be stale.
+
+                // Let's assume we do the math here if we have 'weight' (current reading)
+                // NewFactor = (CurrentWeight / KnownWeight) * CurrentFactor
+
+                // We need the CurrentFactor. selectedDevice.calibrationFactor might be old if updated elsewhere.
+                // But let's use selectedDevice.calibrationFactor.
+
+                const currentFactor = selectedDevice.calibrationFactor || 2280.0;
+                const reading = weight; // Current weight from state
+
+                if (reading === 0) {
+                    toast.error("Cannot calibrate if reading is 0. Please place weight first.");
+                    return;
+                }
+
+                const newFactor = (reading / value) * currentFactor;
+                payload.value = newFactor;
+
+                console.log(`Calibrating: Reading=${reading}, Known=${value}, OldFactor=${currentFactor} -> NewFactor=${newFactor}`);
+            }
+
+            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/iot/commands/${selectedDevice.id}`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload),
+            });
+
+            const data = await res.json();
+            if (data.success) {
+                toast.success(`Command ${type} sent! Wait 1-2s...`);
+                if (type === "CALIBRATE") {
+                    // Update local device state to reflect new factor
+                    // Ideally re-fetch device
+                    fetchDevices();
+                    setIsCalModalOpen(false);
+                }
+            } else {
+                toast.error(data.message);
+            }
+        } catch (error) {
+            toast.error("Failed to send command");
+        }
+    };
+
     if (devices.length === 0 && !loading) {
         return (
             <div className="p-6 text-center">
@@ -396,6 +469,16 @@ export default function IoTDashboard() {
                                 Sistem akan mencatat log packing dan mengirim notifikasi alert saat timbangan mencapai target di atas.
                             </p>
                         </div>
+                        {/* Calibration Button */}
+                        <div className="mt-6 pt-4 border-t border-gray-100 flex justify-end">
+                            <button
+                                onClick={() => setIsCalModalOpen(true)}
+                                className="flex items-center gap-2 text-gray-500 hover:text-blue-600 font-bold text-sm transition-colors border border-gray-200 px-4 py-2 rounded-lg hover:border-blue-300 bg-gray-50 hover:bg-blue-50"
+                            >
+                                <Icon path={mdiWrench} size={0.8} />
+                                Calibration Mode
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -496,6 +579,80 @@ export default function IoTDashboard() {
                     </table>
                 </div>
             </div>
+            {/* Calibration Modal */}
+            {isCalModalOpen && selectedDevice && (
+                <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[100] backdrop-blur-sm">
+                    <div className="bg-white p-8 rounded-2xl w-full max-w-lg shadow-2xl transform transition-all">
+                        <div className="flex justify-between items-center mb-6 border-b border-gray-100 pb-4">
+                            <div>
+                                <h2 className="text-2xl font-black text-gray-800 flex items-center gap-2">
+                                    <Icon path={mdiWrench} className="text-[#00B69B]" size={1.2} />
+                                    Calibration
+                                </h2>
+                                <p className="text-sm text-gray-400 font-medium">Remote control for {selectedDevice.name}</p>
+                            </div>
+                            <button onClick={() => setIsCalModalOpen(false)} className="text-gray-400 hover:text-gray-600">✕</button>
+                        </div>
+
+                        <div className="mb-8 p-4 bg-gray-50 rounded-xl border border-gray-100 flex flex-col items-center">
+                            <span className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Live Reading</span>
+                            <div className="text-5xl font-black text-[#202224] flex items-baseline gap-2">
+                                {weight.toFixed(2)}
+                                <span className="text-lg text-gray-400 font-bold">kg</span>
+                            </div>
+                            <span className="text-xs text-[#00B69B] bg-[#00B69B]/10 px-2 py-1 rounded-md mt-2 font-bold animate-pulse">
+                                Live from Device
+                            </span>
+                        </div>
+
+                        <div className="space-y-6">
+                            {/* Step 1: Tare */}
+                            <div className="flex items-center justify-between gap-4 p-4 border border-gray-100 rounded-xl hover:border-blue-200 transition-colors group">
+                                <div>
+                                    <h3 className="font-bold text-gray-700">1. Zero Scale (Tare)</h3>
+                                    <p className="text-xs text-gray-400">Empty the scale before clicking</p>
+                                </div>
+                                <button
+                                    onClick={() => handleCalibrationCommand("TARE")}
+                                    className="bg-gray-800 text-white px-4 py-2 rounded-lg font-bold text-sm hover:bg-gray-900 shadow-lg shadow-gray-200"
+                                >
+                                    TARE NOW
+                                </button>
+                            </div>
+
+                            {/* Step 2: Calibrate */}
+                            <div className="p-4 border border-gray-100 rounded-xl hover:border-blue-200 transition-colors">
+                                <h3 className="font-bold text-gray-700 mb-2">2. Calibrate Factor</h3>
+                                <p className="text-xs text-gray-400 mb-4">Place a known weight (e.g., 1kg) and enter value below.</p>
+
+                                <div className="flex gap-2">
+                                    <div className="relative flex-grow">
+                                        <input
+                                            type="number"
+                                            placeholder="Known Weight..."
+                                            className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-[#00B69B] outline-none font-bold"
+                                            onChange={(e) => setCalKnownWeight(parseFloat(e.target.value))}
+                                        />
+                                        <span className="absolute right-4 top-2.5 text-gray-400 text-xs font-bold">KG</span>
+                                    </div>
+                                    <button
+                                        onClick={() => handleCalibrationCommand("CALIBRATE", calKnownWeight)}
+                                        className="bg-[#00B69B] text-white px-6 py-2 rounded-lg font-bold text-sm hover:bg-[#00947d] shadow-lg shadow-teal-100"
+                                    >
+                                        CALIBRATE
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="mt-6 text-center">
+                            <p className="text-[10px] text-gray-400 bg-yellow-50 p-2 rounded border border-yellow-100">
+                                ⚠️ Commands may take 1-2 seconds to process due to polling interval.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
