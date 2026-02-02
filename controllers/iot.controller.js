@@ -101,29 +101,8 @@ const ingestData = async (req, res, next) => {
       return res.status(200).json({ success: true, message: "Device reset to ready" });
     }
 
-    // Logic for triggering Packing Log
-    if (weight >= device.threshold && device.isReady) {
-      // Find active session for this device
-      const activeSession = await prisma.deviceSession.findFirst({
-        where: {
-          deviceId: device.id,
-          isActive: true
-        }
-      });
-
-      await prisma.$transaction([
-        prisma.packingLog.create({
-          data: {
-            weight: parseFloat(weight),
-            deviceId: device.id,
-            petaniId: activeSession?.petaniId || null
-          }
-        }),
-        prisma.device.update({ where: { id: device.id }, data: { isReady: false } })
-      ]);
-
-      return res.status(200).json({ success: true, message: "Packing event recorded", alert: true });
-    }
+    // Removed automatic packing log creation
+    // Packing logs are now created manually via /loadcell/pack endpoint
 
     // Check for pending command
     let responsePayload = { success: true, message: "Reading recorded" };
@@ -220,6 +199,63 @@ const resetDeviceLogs = async (req, res, next) => {
   }
 };
 
+const createPackingLog = async (req, res, next) => {
+  try {
+    const { token, weight } = req.body;
+
+    if (!token || weight === undefined) {
+      return res.status(400).json({
+        success: false,
+        message: "Token and weight are required"
+      });
+    }
+
+    // Find device by token
+    const device = await prisma.device.findUnique({ where: { token } });
+    if (!device) {
+      return res.status(404).json({
+        success: false,
+        message: "Device not found"
+      });
+    }
+
+    // Check for active session
+    const activeSession = await prisma.deviceSession.findFirst({
+      where: {
+        deviceId: device.id,
+        isActive: true
+      }
+    });
+
+    if (!activeSession) {
+      return res.status(400).json({
+        success: false,
+        message: "No active session. Please start a session first."
+      });
+    }
+
+    // Create packing log with petaniId from session
+    const log = await prisma.packingLog.create({
+      data: {
+        weight: parseFloat(weight),
+        deviceId: device.id,
+        petaniId: activeSession.petaniId
+      },
+      include: {
+        petani: true
+      }
+    });
+
+    res.status(200).json({
+      success: true,
+      message: "Packing recorded successfully",
+      data: log
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 const verifyPacking = async (req, res, next) => {
   try {
     const { id } = req.params;
@@ -249,6 +285,7 @@ module.exports = {
   getPackingLogs,
   getLatestLoadcellReading,
   ingestData,
+  createPackingLog,
   deletePackingLog,
   resetDeviceLogs,
   verifyPacking,

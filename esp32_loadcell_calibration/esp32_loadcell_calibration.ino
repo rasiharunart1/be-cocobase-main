@@ -4,14 +4,13 @@
 #include <HX711.h>
 #include <WiFi.h>
 
-
 // --- CONFIGURATION ---
 const char *ssid = "YOUR_WIFI_SSID";         // GANTI DENGAN WIFI ANDA
 const char *password = "YOUR_WIFI_PASSWORD"; // GANTI DENGAN PASSWORD ANDA
 
 // Backend API
 const char *apiUrl =
-    "https://cocobase-ui-sandy.vercel.app/api/v1/iot/loadcell/ingest";
+    "https://be-cocobase-main.vercel.app/api/v1/iot/loadcell/ingest";
 const char *deviceToken = "YOUR_DEVICE_TOKEN"; // DAPATKAN DARI HALAMAN DEVICES
 
 // Loadcell Pins
@@ -69,6 +68,12 @@ void setup() {
     Serial.print(".");
   }
   Serial.println("\nWiFi connected!");
+  Serial.print("IP Address: ");
+  Serial.println(WiFi.localIP());
+  Serial.println("========================================");
+  Serial.println("Setup Complete! Starting main loop...");
+  Serial.println("========================================");
+  delay(1000);
 }
 
 // --- LOOP ---
@@ -79,6 +84,8 @@ void loop() {
       float weight = scale.get_units(5); // Average 5 readings
       // if (weight < 0) weight = 0.0; // Optional: clamping
       sendDataAndCheckCommands(weight);
+    } else {
+      Serial.println("⚠ HX711 not ready!");
     }
     lastSendTime = millis();
   }
@@ -106,7 +113,8 @@ void sendDataAndCheckCommands(float weight) {
 
   if (httpResponseCode > 0) {
     String response = http.getString();
-    // Serial.println("Sent: " + String(weight) + " | Resp: " + response);
+    Serial.printf("📤 Weight: %.2f kg | HTTP: %d | Response: %s\n", weight,
+                  httpResponseCode, response.c_str());
 
     // Parse Response for Commands
     StaticJsonDocument<512> respDoc;

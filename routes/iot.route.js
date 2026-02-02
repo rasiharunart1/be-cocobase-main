@@ -12,6 +12,7 @@ router.get('/loadcell/:deviceId', getLatestLoadcellReading);
 router.get('/loadcell/latest/:deviceId', getLatestLoadcellReading);
 router.get('/loadcell/logs/:deviceId', getPackingLogs);
 router.post('/loadcell/ingest', ingestData);
+router.post('/loadcell/pack', require('../controllers/iot.controller').createPackingLog);
 router.post('/logs/verify/:id', verifyPacking);
 router.post('/commands/:deviceId', require('../controllers/iot.controller').sendCommand);
 
