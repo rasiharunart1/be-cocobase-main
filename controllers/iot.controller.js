@@ -105,7 +105,11 @@ const ingestData = async (req, res, next) => {
     // Packing logs are now created manually via /loadcell/pack endpoint
 
     // Check for pending command
-    let responsePayload = { success: true, message: "Reading recorded" };
+    let responsePayload = {
+      success: true,
+      message: "Reading recorded",
+      threshold: device.threshold || 5.0
+    };
 
     if (device.pendingCommand) {
       try {
