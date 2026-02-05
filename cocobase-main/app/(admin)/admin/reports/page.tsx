@@ -19,20 +19,41 @@ export default function ReportsPage() {
 
     const fetchPetanis = async () => {
         try {
+            setLoadingPetanis(true);
             const token = localStorage.getItem("token");
+
+            if (!token) {
+                console.error("No token found");
+                toast.error("Sesi login tidak ditemukan. Silakan login kembali.");
+                return;
+            }
+
             const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/petani?limit=100`, {
                 headers: {
                     "Authorization": `Bearer ${token}`,
                     "Content-Type": "application/json"
                 }
             });
+
+            if (!res.ok) {
+                throw new Error(`HTTP error! status: ${res.status}`);
+            }
+
             const data = await res.json();
-            if (data.success && data.petani) {
-                setPetanis(data.petani);
+            console.log("Petani API Response:", data); // Debug log
+
+            // Backend returns: { success: true, data: { pagination, petani } }
+            if (data.success && data.data && data.data.petani) {
+                setPetanis(data.data.petani);
+            } else {
+                console.error("Invalid response structure:", data);
+                toast.error("Format data tidak sesuai");
             }
         } catch (error) {
             console.error("Failed to fetch petanis", error);
             toast.error("Gagal memuat data petani");
+        } finally {
+            setLoadingPetanis(false);
         }
     };
 
@@ -99,8 +120,11 @@ export default function ReportsPage() {
                             value={filters.petaniId}
                             onChange={(e) => setFilters({ ...filters, petaniId: e.target.value })}
                             className="w-full border rounded-md px-3 py-2 text-sm"
+                            disabled={loadingPetanis}
                         >
-                            <option value="">All Farmers</option>
+                            <option value="">
+                                {loadingPetanis ? "Loading farmers..." : "All Farmers"}
+                            </option>
                             {petanis.map((p) => (
                                 <option key={p.id} value={p.id}>{p.nama}</option>
                             ))}
