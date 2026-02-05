@@ -92,6 +92,13 @@ const float ZERO_THRESHOLD =
 const float NOISE_FILTER =
     0.005; // Filter out changes smaller than this (0.005 kg = 5g)
 
+// Weight unit configuration
+// Set false = Tampilan dalam GRAM (contoh: 5000.0 g) -> Cocok untuk loadcell
+// kecil/presisi Set true  = Tampilan dalam KILOGRAM (contoh: 5.000 kg) -> Cocok
+// untuk loadcell besar (>10kg)
+const bool USE_KILOGRAMS = true;
+const float GRAM_TO_KG = 1000.0; // Conversion factor
+
 // ==================== GLOBAL VARIABLES ====================
 
 HX711 scale;
