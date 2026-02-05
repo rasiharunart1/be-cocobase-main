@@ -1,22 +1,11 @@
 /**
- * ESP32 Loadcell IoT System - Manual Packing with LCD (STABLE VERSION)
+ * ESP32 Loadcell IoT System - Manual Packing with LCD (v2.3 THRESHOLD ALARM)
  *
- * Improvements:
- * - Enhanced weight stability with moving average filter
- * - Negative value clamping
- * - Better noise reduction
- * - Proper unit display (gram/kg)
- * - Increased averaging samples
- * - Dead zone for zero weight
- *
- * Features:
- * - Real-time weight monitoring with LCD display
- * - Manual packing trigger via push button (2-press system)
- * - LCD I2C display for weight and status
- * - Remote calibration (TARE & CALIBRATE) via web dashboard
- * - EEPROM persistence for calibration factor
- * - WiFi auto-reconnect
- * - Session validation
+ * NEW Features v2.3:
+ * - Dynamic Threshold from Web Dashboard
+ * - Buzzer Alert when weight >= threshold
+ * - Faster reading (optimized samples)
+ * - 4-decimal precision (native KG)
  *
  * Hardware:
  * - ESP32 Development Board
@@ -24,12 +13,14 @@
  * - Loadcell Sensor
  * - Push Button (Momentary)
  * - I2C LCD Display 16x2
+ * - Buzzer (Active/Passive)
  *
  * Wiring:
  * - HX711 DOUT -> GPIO 16
  * - HX711 SCK  -> GPIO 4
- * - Button     -> GPIO 5
- * - Button GND -> GND (with internal pull-up)
+ * - Button     -> GPIO 5 (with internal pull-up)
+ * - Buzzer (+) -> GPIO 2 (D2)
+ * - Buzzer (-) -> GND
  * - LCD SDA    -> GPIO 21
  * - LCD SCL    -> GPIO 22
  * - LCD VCC    -> 5V
@@ -45,9 +36,9 @@
 #include <Wire.h>
 
 // ==================== LCD CONFIGURATION ====================
-const int LCD_COLS = 16;      // 16 columns
-const int LCD_ROWS = 2;       // 2 rows
-const int LCD_ADDRESS = 0x27; // I2C address (try 0x3F if doesn't work)
+const int LCD_COLS = 16;
+const int LCD_ROWS = 2;
+const int LCD_ADDRESS = 0x27; // Try 0x3F if doesn't work
 
 LiquidCrystal_I2C lcd(LCD_ADDRESS, LCD_COLS, LCD_ROWS);
 
@@ -64,19 +55,14 @@ const char *API_URL_PACK =
     "https://be-cocobase-main.vercel.app/api/v1/iot/loadcell/pack";
 const char *DEVICE_TOKEN = "7400e85c-80ef-4352-8400-6361294d3050";
 
-// HX711 Loadcell Pins
+// Hardware Pins
 const int LOADCELL_DOUT_PIN = 16;
 const int LOADCELL_SCK_PIN = 4;
-
-// Push Button Pin (Connect between PIN and GND)
-const int BUTTON_PIN = 5; // GPIO 5 (Check your board pinout!)
-
-// Buzzer Configuration
-const int BUZZER_PIN = 18;     // GPIO 18, connect to Buzzer (+)
-float alertThresholdKg = 10.0; // Default 10kg, updated from server
+const int BUTTON_PIN = 5;
+const int BUZZER_PIN = 2; // D2 (GPIO 2)
 
 // Timing Configuration
-const unsigned long SEND_INTERVAL = 1000;
+const unsigned long SEND_INTERVAL = 300; // 300ms for faster updates
 const unsigned long WIFI_RECONNECT_INTERVAL = 30000;
 
 // EEPROM Configuration
@@ -86,23 +72,21 @@ float DEFAULT_CALIBRATION_FACTOR = 2280.0;
 
 // ==================== WEIGHT FILTERING CONFIG ====================
 const int MOVING_AVG_SIZE = 5; // Moving average buffer size
-const int HX711_SAMPLES = 15;  // Samples per reading (increased)
+const int HX711_SAMPLES = 15;  // Samples per reading (increased for stability)
 const float ZERO_THRESHOLD =
-    0.01; // Values below this are treated as 0 (0.01 kg = 10g)
-const float NOISE_FILTER =
-    0.005; // Filter out changes smaller than this (0.005 kg = 5g)
+    5.0;                        // Values below this are treated as 0 (in grams)
+const float NOISE_FILTER = 2.0; // Filter out changes smaller than this (grams)
 
 // Weight unit configuration
-// Set false = Tampilan dalam GRAM (contoh: 5000.0 g) -> Cocok untuk loadcell
-// kecil/presisi Set true  = Tampilan dalam KILOGRAM (contoh: 5.000 kg) -> Cocok
-// untuk loadcell besar (>10kg)
-const bool USE_KILOGRAMS = true;
-const float GRAM_TO_KG = 1000.0; // Conversion factor
+const bool USE_KILOGRAMS = false; // Set to false to display in grams
+const float GRAM_TO_KG = 1000.0;  // Conversion factor
 
 // ==================== GLOBAL VARIABLES ====================
 
 HX711 scale;
 float calibrationFactor = DEFAULT_CALIBRATION_FACTOR;
+float targetThreshold = 5.0; // Default 5kg, updated from server
+
 unsigned long lastSendTime = 0;
 unsigned long lastWiFiCheckTime = 0;
 bool isWiFiConnected = false;
@@ -115,6 +99,9 @@ const unsigned long debounceDelay = 50;
 
 // Button press state tracking
 bool waitingForTare = false;
+
+// Buzzer Alert State
+bool buzzerActive = false;
 
 // Moving average filter
 float weightBuffer[MOVING_AVG_SIZE];
@@ -133,7 +120,6 @@ void initWeightBuffer() {
 }
 
 float getMovingAverage(float newValue) {
-  // Add new value to buffer
   weightBuffer[bufferIndex] = newValue;
   bufferIndex = (bufferIndex + 1) % MOVING_AVG_SIZE;
 
@@ -141,15 +127,16 @@ float getMovingAverage(float newValue) {
     bufferFilled = true;
   }
 
-  // Calculate average
   float sum = 0.0;
   int count = bufferFilled ? MOVING_AVG_SIZE : bufferIndex;
+  if (count == 0)
+    count = 1; // Safety
 
   for (int i = 0; i < count; i++) {
     sum += weightBuffer[i];
   }
 
-  return count > 0 ? sum / count : 0.0;
+  return sum / count;
 }
 
 float getStableWeight() {
@@ -157,37 +144,67 @@ float getStableWeight() {
     return lastStableWeight;
   }
 
-  // 1. Read raw weight (averaged by HX711 hardware)
+  // Read weight (already in KG if calibration factor is KG-native)
   float rawWeight = scale.get_units(HX711_SAMPLES);
 
-  // 2. Moving Average Filter
+  // Clamp negative values close to zero
+  if (rawWeight < 0 && rawWeight > -ZERO_THRESHOLD) {
+    rawWeight = 0.0;
+  }
+
+  // Apply moving average filter
   float filteredWeight = getMovingAverage(rawWeight);
 
-  // 3. Noise & Zero Threshold (Clamping)
+  // Apply zero threshold
   if (abs(filteredWeight) < ZERO_THRESHOLD) {
     filteredWeight = 0.0;
   }
 
-  // 4. Force POSITIVE only (Mengatasi masalah "nilai negatif")
-  if (filteredWeight < 0) {
-    filteredWeight = 0.0;
-  }
-
-  // 5. Stability Filter to prevent jitter (Lock value if change is small)
+  // Noise filtering
   float weightDiff = abs(filteredWeight - lastStableWeight);
-  // Only update if change > NOISE_FILTER OR if we are returning to zero
-  if (weightDiff > NOISE_FILTER ||
-      (filteredWeight == 0.0 && lastStableWeight != 0.0)) {
-    lastStableWeight = filteredWeight;
+  if (weightDiff < NOISE_FILTER && lastStableWeight != 0.0) {
+    filteredWeight = lastStableWeight;
   }
 
-  return lastStableWeight;
+  lastStableWeight = filteredWeight;
+  return filteredWeight;
 }
 
-String formatWeight(float weightInKg) {
+String formatWeight(float weight) {
   char buffer[16];
-  dtostrf(weightInKg, 6, 4, buffer); // 4 decimal places for kg
-  return String(buffer) + " kg";
+
+  if (USE_KILOGRAMS) {
+    // Weight is already in KG
+    dtostrf(weight, 6, 4, buffer); // 4 decimal places
+    return String(buffer) + " kg";
+  } else {
+    // Weight in grams
+    dtostrf(weight, 6, 1, buffer);
+    return String(buffer) + " g";
+  }
+}
+
+// ==================== THRESHOLD ALARM ====================
+
+void checkThresholdAlert(float currentWeightInGrams) {
+  // Convert to kg for comparison (threshold from server is in kg)
+  float currentWeightKg = currentWeightInGrams / GRAM_TO_KG;
+
+  // Hysteresis: ON if >= threshold, OFF if < (threshold - 0.05kg)
+  if (currentWeightKg >= targetThreshold) {
+    if (!buzzerActive) {
+      buzzerActive = true;
+      digitalWrite(BUZZER_PIN, HIGH); // Turn ON buzzer
+      Serial.printf("🔔 ALERT! Weight %.4f kg >= Threshold %.4f kg\n",
+                    currentWeightKg, targetThreshold);
+    }
+  } else if (currentWeightKg < (targetThreshold - 0.05)) {
+    if (buzzerActive) {
+      buzzerActive = false;
+      digitalWrite(BUZZER_PIN, LOW); // Turn OFF buzzer
+      Serial.println("🔕 Alert cleared");
+    }
+  }
 }
 
 // ==================== LCD FUNCTIONS ====================
@@ -199,10 +216,9 @@ void clearLCDLine(int row) {
   }
 }
 
-void updateLCDWeight(float weightInKg) {
+void updateLCDWeight(float weight) {
   lcd.setCursor(0, 0);
-
-  String weightStr = formatWeight(weightInKg);
+  String weightStr = formatWeight(weight);
   lcd.print(weightStr);
 
   // Clear rest of line
@@ -214,7 +230,6 @@ void updateLCDWeight(float weightInKg) {
 void updateLCDStatus(String status) {
   lcd.setCursor(0, 1);
 
-  // Truncate if too long
   if (status.length() > LCD_COLS) {
     status = status.substring(0, LCD_COLS);
   }
@@ -230,14 +245,12 @@ void updateLCDStatus(String status) {
 void showLCDMessage(String line1, String line2 = "") {
   lcd.clear();
 
-  // Line 1
   lcd.setCursor(0, 0);
   if (line1.length() > LCD_COLS) {
     line1 = line1.substring(0, LCD_COLS);
   }
   lcd.print(line1);
 
-  // Line 2
   if (line2.length() > 0) {
     lcd.setCursor(0, 1);
     if (line2.length() > LCD_COLS) {
@@ -319,19 +332,21 @@ void checkWiFiConnection() {
   }
 }
 
-void sendWeightData(float weightInKg) {
+void sendWeightData(float weight) {
   if (!isWiFiConnected)
     return;
 
   HTTPClient http;
   http.begin(API_URL_INGEST);
   http.addHeader("Content-Type", "application/json");
-  http.setTimeout(10000);
+  http.setTimeout(5000);
+
+  // Convert to kg for API (backend expects kg, weight is in grams)
+  float weightToSend = weight / GRAM_TO_KG;
 
   JsonDocument doc;
   doc["token"] = DEVICE_TOKEN;
-  // Increase precision to 4 decimal places (e.g. 5.1234 kg)
-  doc["weight"] = round(weightInKg * 10000) / 10000.0;
+  doc["weight"] = round(weightToSend * 10000) / 10000.0; // 4 decimal precision
 
   String jsonPayload;
   serializeJson(doc, jsonPayload);
@@ -345,7 +360,31 @@ void sendWeightData(float weightInKg) {
     DeserializationError error = deserializeJson(responseDoc, response);
 
     if (!error) {
-      // 1. Check for command
+      // 1️⃣ UPDATE THRESHOLD FROM SERVER
+      if (responseDoc.containsKey("threshold")) {
+        // Check if threshold is not null
+        if (!responseDoc["threshold"].isNull()) {
+          float newThreshold = responseDoc["threshold"].as<float>();
+
+          // Debug: Print received threshold
+          Serial.printf("📡 Received threshold from server: %.4f kg\n",
+                        newThreshold);
+
+          if (newThreshold > 0 &&
+              abs(newThreshold - targetThreshold) > 0.0001) {
+            targetThreshold = newThreshold;
+            Serial.printf("✅ Threshold UPDATED: %.4f kg\n", targetThreshold);
+          } else if (newThreshold > 0) {
+            Serial.printf("ℹ️ Threshold unchanged: %.4f kg\n", targetThreshold);
+          }
+        } else {
+          Serial.println("⚠️ Threshold field is null");
+        }
+      } else {
+        Serial.println("⚠️ No threshold field in response");
+      }
+
+      // 2️⃣ HANDLE COMMANDS
       if (responseDoc["command"].is<JsonObject>()) {
         JsonObject cmd = responseDoc["command"];
         String commandType = cmd["type"].as<String>();
@@ -356,7 +395,7 @@ void sendWeightData(float weightInKg) {
           Serial.println("Executing TARE...");
           showLCDMessage("Remote TARE", "Resetting...");
           scale.tare();
-          initWeightBuffer(); // Reset moving average
+          initWeightBuffer();
           Serial.println("✓ TARE Complete");
           delay(1000);
         } else if (commandType == "CALIBRATE") {
@@ -370,41 +409,53 @@ void sendWeightData(float weightInKg) {
             calibrationFactor = newFactor;
             scale.set_scale(calibrationFactor);
             saveCalibrationFactor(calibrationFactor);
-            initWeightBuffer(); // Reset moving average
+            initWeightBuffer();
 
             Serial.println("✓ CALIBRATE Complete");
             delay(1000);
           }
-        }
-      }
+        } else if (commandType == "SET_THRESHOLD") {
+          if (cmd["value"].is<float>()) {
+            float newThreshold = cmd["value"].as<float>();
 
-      // 2. Update Threshold from Server
-      if (responseDoc["threshold"].is<float>()) {
-        float serverThreshold = responseDoc["threshold"];
-        if (serverThreshold > 0) {
-          alertThresholdKg = serverThreshold;
+            Serial.println("Executing SET_THRESHOLD...");
+            Serial.printf("New Threshold: %.4f kg\n", newThreshold);
+            showLCDMessage("Set Threshold", String(newThreshold, 2) + " kg");
+
+            targetThreshold = newThreshold;
+
+            Serial.printf("✅ THRESHOLD SET: %.4f kg\n", targetThreshold);
+            delay(1500);
+          }
         }
       }
+    } else {
+      Serial.print("⚠️ JSON Parse Error: ");
+      Serial.println(error.c_str());
     }
 
     // Update LCD
-    updateLCDWeight(weightInKg);
+    updateLCDWeight(weight);
     if (waitingForTare) {
       updateLCDStatus("Press for TARE");
     } else {
-      // Show alert status on LCD if active
-      if (weightInKg >= alertThresholdKg) {
-        updateLCDStatus("! MAX LIMIT !");
+      // Show alert status or threshold
+      if (buzzerActive) {
+        updateLCDStatus("ALERT! >= Target");
       } else {
-        updateLCDStatus(isWiFiConnected ? "WiFi OK" : "WiFi Error");
+        char buf[16];
+        sprintf(buf, "Target: %.2f kg", targetThreshold);
+        updateLCDStatus(String(buf));
       }
     }
+  } else {
+    Serial.printf("⚠️ HTTP Error: %d\n", httpResponseCode);
   }
 
   http.end();
 }
 
-void sendPackingData(float weightInKg) {
+void sendPackingData(float weight) {
   if (!isWiFiConnected) {
     Serial.println("⚠ WiFi not connected");
     showLCDMessage("WiFi Error!", "No connection");
@@ -412,12 +463,15 @@ void sendPackingData(float weightInKg) {
     return;
   }
 
+  // Convert to kg for API (weight is in grams)
+  float weightToSend = weight / GRAM_TO_KG;
+
   Serial.println("\n========================================");
   Serial.println("📦 BUTTON #1 - SAVING DATA");
   Serial.println("========================================");
-  Serial.printf("Weight: %.4f kg\n", weightInKg);
+  Serial.printf("Weight: %.4f kg (%.1f g)\n", weightToSend, weight);
 
-  showLCDMessage("Saving...", formatWeight(weightInKg));
+  showLCDMessage("Saving...", formatWeight(weight));
 
   HTTPClient http;
   http.begin(API_URL_PACK);
@@ -426,7 +480,7 @@ void sendPackingData(float weightInKg) {
 
   JsonDocument doc;
   doc["token"] = DEVICE_TOKEN;
-  doc["weight"] = round(weightInKg * 10000) / 10000.0;
+  doc["weight"] = round(weightToSend * 10000) / 10000.0;
 
   String jsonPayload;
   serializeJson(doc, jsonPayload);
@@ -450,6 +504,15 @@ void sendPackingData(float weightInKg) {
 
         showLCDMessage("Saved!", "Press for TARE");
         waitingForTare = true;
+
+        // Success beep
+        digitalWrite(BUZZER_PIN, HIGH);
+        delay(100);
+        digitalWrite(BUZZER_PIN, LOW);
+        delay(100);
+        digitalWrite(BUZZER_PIN, HIGH);
+        delay(100);
+        digitalWrite(BUZZER_PIN, LOW);
       } else {
         Serial.println("✗ " + message);
 
@@ -482,14 +545,20 @@ void performTare() {
   showLCDMessage("TARE...", "Resetting...");
 
   scale.tare();
-  initWeightBuffer(); // Reset moving average
+  initWeightBuffer();
 
   Serial.println("✓ TARE Complete!");
   Serial.println("✓ Ready for next packing\n");
   Serial.println("========================================\n");
 
-  showLCDMessage("TARE Done!", "Ready: 0.0 g");
-  delay(2000);
+  showLCDMessage("TARE Done!", "Ready");
+
+  // Long beep
+  digitalWrite(BUZZER_PIN, HIGH);
+  delay(500);
+  digitalWrite(BUZZER_PIN, LOW);
+
+  delay(1500);
 
   waitingForTare = false;
 }
@@ -501,17 +570,21 @@ void setup() {
   delay(1000);
 
   Serial.println("\n\n========================================");
-  Serial.println("  ESP32 Loadcell with LCD v2.0 STABLE");
+  Serial.println("  ESP32 Loadcell v2.3 THRESHOLD ALARM");
   Serial.println("========================================");
+
+  // Initialize Buzzer
+  pinMode(BUZZER_PIN, OUTPUT);
+  digitalWrite(BUZZER_PIN, LOW); // Start OFF
 
   // Initialize LCD
   Serial.println("\n[1/7] Initializing LCD...");
-  Wire.begin(21, 22); // SDA=21, SCL=22
+  Wire.begin(21, 22);
   lcd.init();
   lcd.backlight();
-  showLCDMessage("Cocobase IoT", "v2.0 STABLE");
+  showLCDMessage("Cocobase v2.3", "Threshold Alarm");
   Serial.println("✓ LCD initialized");
-  delay(1000);
+  delay(1500);
 
   // Initialize weight filter
   Serial.println("\n[2/7] Initializing Filters...");
@@ -519,8 +592,8 @@ void setup() {
   Serial.println("✓ Moving average filter ready");
   Serial.printf("  - Samples: %d\n", HX711_SAMPLES);
   Serial.printf("  - Buffer: %d\n", MOVING_AVG_SIZE);
-  Serial.printf("  - Zero threshold: %.1f g\n", ZERO_THRESHOLD);
-  showLCDMessage("Filter Ready", "Samples:" + String(HX711_SAMPLES));
+  Serial.printf("  - Zero threshold: %.4f kg\n", ZERO_THRESHOLD);
+  showLCDMessage("Filter Ready", "Optimized");
   delay(1000);
 
   // Initialize EEPROM
@@ -534,17 +607,6 @@ void setup() {
   Serial.println("\n[4/7] Initializing Button...");
   pinMode(BUTTON_PIN, INPUT_PULLUP);
   Serial.println("✓ Button on GPIO " + String(BUTTON_PIN));
-
-  // Initialize Buzzer
-  Serial.println("[4a/7] Initializing Buzzer...");
-  pinMode(BUZZER_PIN, OUTPUT);
-  digitalWrite(BUZZER_PIN, LOW);
-
-  // Test Buzzer (Short Beep)
-  digitalWrite(BUZZER_PIN, HIGH);
-  delay(100);
-  digitalWrite(BUZZER_PIN, LOW);
-
   showLCDMessage("Button Ready", "GPIO " + String(BUTTON_PIN));
   delay(1000);
 
@@ -563,7 +625,7 @@ void setup() {
     scale.tare();
     delay(500);
 
-    // Warm up - discard first few readings
+    // Warm up
     Serial.println("Warming up sensor...");
     for (int i = 0; i < 5; i++) {
       scale.get_units(10);
@@ -571,7 +633,7 @@ void setup() {
     }
 
     Serial.println("✓ Loadcell initialized");
-    showLCDMessage("Loadcell Ready", "0.0 g");
+    showLCDMessage("Loadcell Ready", "0.0000 kg");
     delay(1000);
   } else {
     Serial.println("✗ HX711 not detected!");
@@ -587,8 +649,8 @@ void setup() {
   Serial.println("\n[7/7] Setup Complete!");
   Serial.println("========================================");
   Serial.println("Device Token: " + String(DEVICE_TOKEN));
-  Serial.println("Unit Display: " +
-                 String(USE_KILOGRAMS ? "Kilograms" : "Grams"));
+  Serial.println("Mode: Native Kilograms (4 decimals)");
+  Serial.printf("Default Threshold: %.4f kg\n", targetThreshold);
   Serial.println("========================================");
   Serial.println("\n🚀 System Ready!\n");
 
@@ -631,46 +693,21 @@ void loop() {
 
   lastButtonState = reading;
 
-  // Check for alert
-  if (scale.is_ready()) {
-    float currentWeight = getStableWeight();
-    float currentWeightKg;
-
-    if (USE_KILOGRAMS) {
-      currentWeightKg = currentWeight;
-    } else {
-      currentWeightKg = currentWeight / 1000.0;
-    }
-
-    // Alert logic: If weight >= threshold -> Beep
-    // Only beep if weight is significant (> 0.05kg) to avoid noise alerts on
-    // empty scale
-    if (currentWeightKg >= alertThresholdKg && currentWeightKg > 0.05) {
-      // Intermittent beep pattern (500ms ON, 500ms OFF)
-      if ((millis() / 200) % 2 == 0) {
-        digitalWrite(BUZZER_PIN, HIGH);
-      } else {
-        digitalWrite(BUZZER_PIN, LOW);
-      }
-    } else {
-      digitalWrite(BUZZER_PIN, LOW);
-    }
-  }
-
-  // Send weight data
+  // Send weight data & check threshold
   if (millis() - lastSendTime >= SEND_INTERVAL) {
     if (scale.is_ready()) {
       float weight = getStableWeight();
+
+      // Check threshold alarm
+      checkThresholdAlert(weight);
+
+      // Send to server
       sendWeightData(weight);
 
       // Debug output
-      float weightInKg;
-      if (USE_KILOGRAMS) {
-        weightInKg = weight;
-      } else {
-        weightInKg = weight / 1000.0;
-      }
-      Serial.printf("Weight: %.4f kg\n", weightInKg);
+      Serial.printf(
+          "Weight: %.1f g (%.4f kg) | Threshold: %.4f kg | Alert: %s\n", weight,
+          weight / GRAM_TO_KG, targetThreshold, buzzerActive ? "ON" : "OFF");
     }
     lastSendTime = millis();
   }
