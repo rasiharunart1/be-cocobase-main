@@ -55,21 +55,22 @@ const generateReport = async (req, res, next) => {
         }
 
         let farmerName = "All Farmers";
+        let farmerFilter = {};
         if (petaniId && petaniId !== "undefined" && petaniId !== "") {
             const farmer = await prisma.petani.findUnique({
                 where: { id: parseInt(petaniId) },
             });
             if (farmer) {
                 farmerName = farmer.nama;
+                farmerFilter.petaniId = parseInt(petaniId);
             }
-            dateFilter.petaniId = parseInt(petaniId);
         }
 
         const logs = await prisma.packingLog.findMany({
             where: {
                 deviceId: parseInt(deviceId),
-                createdAt: dateFilter.createdAt ? dateFilter.createdAt : dateFilter,
-                ...(dateFilter.petaniId ? { petaniId: dateFilter.petaniId } : {})
+                createdAt: dateFilter,
+                ...farmerFilter
             },
             orderBy: { createdAt: "asc" },
             include: {
