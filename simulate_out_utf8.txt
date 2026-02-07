@@ -1,0 +1,90 @@
+﻿Simulating getDevices query...
+node : FAILED: 
+getDevices query 
+error:
+At line:1 char:1
++ node simulate_get_d
+evices.js > 
+simulate_out.txt 2>&1
++ ~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~
+    + CategoryInfo   
+           : NotSpe  
+  cified: (FAILED:   
+  getDevices quer    
+y error::String)     
+[], RemoteExcep    
+tion
+    + FullyQualified 
+   ErrorId : Native  
+  CommandError
+ 
+PrismaClientInitializ
+ationError: 
+Invalid `prisma.devic
+e.findMany()` 
+invocation in
+C:\Users\ACER\Documen
+ts\1 penting\be-cocob
+ase-main\simulate_get
+_devices.js:7:45
+
+  4 async function 
+main() {
+  5     try {
+  6         console.l
+og("Simulating 
+getDevices 
+query...");
+ΓåÆ 7         const 
+devices = await prism
+a.device.findMany(
+Can't reach database 
+server at `ep-jolly-s
+urf-ahreb4f0-pooler.c
+-3.us-east-1.aws.neon
+.tech`:`5432`
+
+Please make sure 
+your database server 
+is running at `ep-jol
+ly-surf-ahreb4f0-pool
+er.c-3.us-east-1.aws.
+neon.tech`:`5432`.
+    at si.handleReque
+stError (C:\Users\ACE
+R\Documents\1 penting
+\be-cocobase-main\nod
+e_modules\@prisma\cli
+ent\runtime\library.j
+s:125:7117)
+    at si.handleAndLo
+gRequestError (C:\Use
+rs\ACER\Documents\1 p
+enting\be-cocobase-ma
+in\node_modules\@pris
+ma\client\runtime\lib
+rary.js:125:6151)
+    at si.request (C:
+\Users\ACER\Documents
+\1 penting\be-cocobas
+e-main\node_modules\@
+prisma\client\runtime
+\library.js:125:5859)
+    at async l (C:\Us
+ers\ACER\Documents\1 
+penting\be-cocobase-m
+ain\node_modules\@pri
+sma\client\runtime\li
+brary.js:130:9805)
+    at async main (C:
+\Users\ACER\Documents
+\1 penting\be-cocobas
+e-main\simulate_get_d
+evices.js:7:25) {
+  clientVersion: 
+'5.8.0',
+  errorCode: 
+undefined
+}

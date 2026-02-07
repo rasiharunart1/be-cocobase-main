@@ -39,6 +39,16 @@ app.get('/', (req, res) => {
     version: '1.0.0'
   });
 });
+
+app.get('/api/v1/debug-db', async (req, res) => {
+  const prisma = require('./libs/prisma');
+  try {
+    const devices = await prisma.device.findMany({ take: 5 });
+    res.json({ success: true, count: devices.length, sample: devices[0] });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message, stack: err.stack });
+  }
+});
 app.use(notFound);
 app.use(serverError);
 

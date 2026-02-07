@@ -1,0 +1,11 @@
+Probing production database - v4...
+Testing connection...
+Error: Can't reach database server at `ep-jolly-surf-ahreb4f0-pooler.c-3.us-east-1.aws.neon.tech`:`5432`
+
+Please make sure your database server is running at `ep-jolly-surf-ahreb4f0-pooler.c-3.us-east-1.aws.neon.tech`:`5432`.
+PrismaClientInitializationError: Can't reach database server at `ep-jolly-surf-ahreb4f0-pooler.c-3.us-east-1.aws.neon.tech`:`5432`
+
+Please make sure your database server is running at `ep-jolly-surf-ahreb4f0-pooler.c-3.us-east-1.aws.neon.tech`:`5432`.
+    at t (C:\Users\ACER\Documents\1 penting\be-cocobase-main\node_modules\@prisma\client\runtime\library.js:116:2723)
+    at async main (C:\Users\ACER\Documents\1 penting\be-cocobase-main\probe_v4.js:16:9)
+Probe finished.
