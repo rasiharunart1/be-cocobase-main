@@ -9,13 +9,12 @@ import { mdiDevices, mdiWeightKilogram, mdiCog, mdiHistory, mdiTrashCan, mdiRefr
 export default function IoTDashboard() {
     const [weight, setWeight] = useState<number>(0);
     const [threshold, setThreshold] = useState<number>(10);
+    const [relayThreshold, setRelayThreshold] = useState<number>(10);
     const [logs, setLogs] = useState<any[]>([]);
     const [devices, setDevices] = useState<any[]>([]);
     const [selectedDevice, setSelectedDevice] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [petanis, setPetanis] = useState<any[]>([]);
-    const [activeSession, setActiveSession] = useState<any>(null);
-    const [selectedPetaniId, setSelectedPetaniId] = useState<string>("");
 
     // Calibration State
     const [isCalModalOpen, setIsCalModalOpen] = useState(false);
@@ -31,8 +30,8 @@ export default function IoTDashboard() {
 
         setWeight(0);
         setThreshold(selectedDevice.threshold);
+        setRelayThreshold(selectedDevice.relayThreshold);
         fetchLogs(selectedDevice.id);
-        fetchActiveSession(selectedDevice.id);
 
         // Poll for latest weight reading every 2 seconds
         const weightInterval = setInterval(async () => {
@@ -69,66 +68,7 @@ export default function IoTDashboard() {
         }
     };
 
-    const fetchActiveSession = async (deviceId: number) => {
-        try {
-            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/session/active/${deviceId}`);
-            const data = await res.json();
-            if (data.success) {
-                setActiveSession(data.data);
-            } else {
-                setActiveSession(null);
-            }
-        } catch (error) {
-            setActiveSession(null);
-        }
-    };
-
-    const handleStartSession = async () => {
-        if (!selectedDevice || !selectedPetaniId) {
-            toast.error("Please select a farmer first");
-            return;
-        }
-
-        try {
-            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/session/start`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    deviceId: selectedDevice.id,
-                    petaniId: parseInt(selectedPetaniId)
-                }),
-            });
-            const data = await res.json();
-            if (data.success) {
-                toast.success("Session started");
-                setActiveSession(data.data);
-                setSelectedPetaniId("");
-            } else {
-                toast.error(data.message);
-            }
-        } catch (error) {
-            toast.error("Failed to start session");
-        }
-    };
-
-    const handleEndSession = async () => {
-        if (!selectedDevice) return;
-
-        try {
-            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/session/end/${selectedDevice.id}`, {
-                method: "POST",
-            });
-            const data = await res.json();
-            if (data.success) {
-                toast.success("Session ended");
-                setActiveSession(null);
-            } else {
-                toast.error(data.message);
-            }
-        } catch (error) {
-            toast.error("Failed to end session");
-        }
-    };
+    // Session management removed - logs are now auto-created and farmers assigned via dropdown
 
     const fetchDevices = async () => {
         try {
@@ -160,18 +100,22 @@ export default function IoTDashboard() {
         }
     };
 
-    const updateThreshold = async (newThreshold: number) => {
+    const updateThresholds = async () => {
         if (!selectedDevice) return;
         try {
             const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/devices/${selectedDevice.id}`, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ threshold: newThreshold }),
+                body: JSON.stringify({
+                    threshold: threshold,
+                    relayThreshold: relayThreshold
+                }),
             });
             const data = await res.json();
             if (data.success) {
                 setThreshold(data.data.threshold);
-                toast.success("Threshold updated!");
+                setRelayThreshold(data.data.relayThreshold);
+                toast.success("Thresholds updated!");
             }
         } catch (error) {
             toast.error("Update failed");
@@ -338,60 +282,7 @@ export default function IoTDashboard() {
                 </div>
             </div>
 
-            {/* Session Management Panel */}
-            <div className="bg-white p-6 rounded-xl shadow-md border border-gray-100 mb-8">
-                <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
-                    <div>
-                        <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-                            <span className="w-3 h-3 rounded-full bg-blue-500 animate-pulse"></span>
-                            Session Management
-                        </h2>
-                        <p className="text-sm text-gray-500">Manage packing session and assign farmer</p>
-                    </div>
-
-                    <div className="flex flex-col md:flex-row gap-3 items-center">
-                        {activeSession ? (
-                            <div className="flex items-center gap-4 bg-green-50 px-4 py-2 rounded-lg border border-green-100">
-                                <div className="text-sm">
-                                    <span className="text-gray-500 block text-xs uppercase font-bold">Current Farmer</span>
-                                    <span className="text-green-700 font-bold text-lg">{activeSession.petani?.nama || "Unknown"}</span>
-                                </div>
-                                <div className="text-sm border-l border-green-200 pl-4">
-                                    <span className="text-gray-500 block text-xs uppercase font-bold">Started At</span>
-                                    <span className="text-gray-700 font-medium">
-                                        {new Date(activeSession.startedAt).toLocaleTimeString()}
-                                    </span>
-                                </div>
-                                <button
-                                    onClick={handleEndSession}
-                                    className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-bold transition shadow-md shadow-red-200 ml-2"
-                                >
-                                    STOP SESSION
-                                </button>
-                            </div>
-                        ) : (
-                            <div className="flex items-center gap-3 w-full md:w-auto">
-                                <select
-                                    className="border border-gray-300 rounded-lg px-4 py-2 text-sm w-full md:w-64 focus:ring-2 focus:ring-blue-500 outline-none"
-                                    value={selectedPetaniId}
-                                    onChange={(e) => setSelectedPetaniId(e.target.value)}
-                                >
-                                    <option value="">-- Select Farmer --</option>
-                                    {petanis.map(p => (
-                                        <option key={p.id} value={p.id}>{p.nama}</option>
-                                    ))}
-                                </select>
-                                <button
-                                    onClick={handleStartSession}
-                                    className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg text-sm font-bold transition shadow-md shadow-blue-200 whitespace-nowrap"
-                                >
-                                    START SESSION
-                                </button>
-                            </div>
-                        )}
-                    </div>
-                </div>
-            </div>
+            {/* Session Management Panel Removed - Auto-logging enabled */}
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
                 {/* Summary: Total Records */}
@@ -443,10 +334,10 @@ export default function IoTDashboard() {
                         <h2 className="text-lg font-bold text-gray-800">Device Settings</h2>
                     </div>
                     <div className="space-y-6">
-                        <div>
-                            <label className="block text-xs font-bold text-gray-400 uppercase mb-2">Target Weight (Threshold)</label>
-                            <div className="flex gap-2 items-center">
-                                <div className="relative flex-grow max-w-xs">
+                        <div className="grid md:grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-xs font-bold text-gray-400 uppercase mb-2">Auto-Log Threshold</label>
+                                <div className="relative">
                                     <input
                                         type="number"
                                         step="0.1"
@@ -456,17 +347,32 @@ export default function IoTDashboard() {
                                     />
                                     <span className="absolute right-4 top-3.5 text-gray-400 font-bold">KG</span>
                                 </div>
-                                <button
-                                    onClick={() => updateThreshold(threshold)}
-                                    className="bg-[#E37D2E] text-white px-6 py-3 rounded-lg font-bold hover:bg-[#c47438] transition shadow-lg shadow-orange-100"
-                                >
-                                    SAVE SETTINGS
-                                </button>
+                                <p className="text-xs text-gray-500 mt-1">Log otomatis dibuat saat mencapai berat ini</p>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-gray-400 uppercase mb-2">Relay Threshold (Max Weight)</label>
+                                <div className="relative">
+                                    <input
+                                        type="number"
+                                        step="0.1"
+                                        value={relayThreshold}
+                                        onChange={(e) => setRelayThreshold(parseFloat(e.target.value))}
+                                        className="w-full border-2 border-gray-100 rounded-lg px-4 py-3 focus:border-blue-500 transition-colors outline-none font-bold text-lg"
+                                    />
+                                    <span className="absolute right-4 top-3.5 text-gray-400 font-bold">KG</span>
+                                </div>
+                                <p className="text-xs text-gray-500 mt-1">ESP32 mematikan relay saat mencapai berat ini</p>
                             </div>
                         </div>
-                        <div className="bg-orange-50 p-3 rounded-lg border border-orange-100">
-                            <p className="text-xs text-orange-700 leading-relaxed font-medium">
-                                Sistem akan mencatat log packing dan mengirim notifikasi alert saat timbangan mencapai target di atas.
+                        <button
+                            onClick={updateThresholds}
+                            className="bg-[#E37D2E] text-white px-6 py-3 rounded-lg font-bold hover:bg-[#c47438] transition shadow-lg shadow-orange-100"
+                        >
+                            SAVE THRESHOLDS
+                        </button>
+                        <div className="bg-blue-50 p-3 rounded-lg border border-blue-100">
+                            <p className="text-xs text-blue-700 leading-relaxed font-medium">
+                                💡 <strong>Auto-Log:</strong> Log dibuat otomatis saat mencapai threshold pertama. <strong>Relay:</strong> ESP32 mematikan relay saat mencapai threshold kedua untuk mencegah overfill.
                             </p>
                         </div>
                         {/* Calibration Button */}
@@ -550,20 +456,18 @@ export default function IoTDashboard() {
                                             <span className="bg-green-50 text-green-600 px-3 py-1 rounded-full font-bold border border-green-100 uppercase tracking-tighter">Success</span>
                                         </td>
                                         <td className="px-6 py-4 flex items-center justify-center gap-2">
-                                            {!log.petani && (
-                                                <div className="flex items-center gap-1">
-                                                    <select
-                                                        onChange={(e) => handleVerifyLog(log.id, parseInt(e.target.value))}
-                                                        className="text-[10px] border border-blue-200 rounded px-1 py-1 bg-blue-50 text-blue-700 outline-none font-bold uppercase transition-all hover:bg-blue-100"
-                                                        defaultValue=""
-                                                    >
-                                                        <option value="" disabled>Assign Farmer...</option>
-                                                        {petanis.map(p => (
-                                                            <option key={p.id} value={p.id}>{p.nama}</option>
-                                                        ))}
-                                                    </select>
-                                                </div>
-                                            )}
+                                            <div className="flex items-center gap-1">
+                                                <select
+                                                    onChange={(e) => handleVerifyLog(log.id, parseInt(e.target.value))}
+                                                    className="text-[10px] border border-blue-200 rounded px-1 py-1 bg-blue-50 text-blue-700 outline-none font-bold uppercase transition-all hover:bg-blue-100"
+                                                    value={log.petani?.id || ""}
+                                                >
+                                                    <option value="">{log.petani ? "Change Farmer..." : "Assign Farmer..."}</option>
+                                                    {petanis.map(p => (
+                                                        <option key={p.id} value={p.id}>{p.nama}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
                                             <button
                                                 onClick={() => handleDeleteLog(log.id)}
                                                 className="text-gray-300 hover:text-red-500 transition-colors p-1"

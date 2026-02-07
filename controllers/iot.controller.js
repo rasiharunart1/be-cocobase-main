@@ -101,15 +101,32 @@ const ingestData = async (req, res, next) => {
       return res.status(200).json({ success: true, message: "Device reset to ready" });
     }
 
-    // Removed automatic packing log creation
-    // Packing logs are now created manually via /loadcell/pack endpoint
+    // Automatic packing log creation when threshold is reached
+    // threshold: Auto-log threshold - creates log automatically when weight >= this value
+    // relayThreshold: Relay control threshold - ESP32 uses this to stop relay/motor
+    if (weight >= device.threshold && device.isReady) {
+      // Create packing log automatically
+      await prisma.packingLog.create({
+        data: {
+          weight: parseFloat(weight),
+          deviceId: device.id,
+          petaniId: null // Admin will assign farmer later via dropdown
+        }
+      });
 
-    // Check for pending command
+      // Mark device as not ready to prevent duplicate logs
+      await prisma.device.update({
+        where: { id: device.id },
+        data: { isReady: false }
+      });
+    }
+
+    // Check for pending command and return thresholds to ESP32
     let responsePayload = {
       success: true,
       message: "Reading recorded",
-      threshold: device.threshold || 5.0,
-      relayThreshold: device.relayThreshold || 10.0
+      threshold: device.threshold || 10.0,        // Auto-log threshold
+      relayThreshold: device.relayThreshold || 10.0  // Relay stop threshold
     };
 
     if (device.pendingCommand) {
@@ -224,27 +241,13 @@ const createPackingLog = async (req, res, next) => {
       });
     }
 
-    // Check for active session
-    const activeSession = await prisma.deviceSession.findFirst({
-      where: {
-        deviceId: device.id,
-        isActive: true
-      }
-    });
-
-    if (!activeSession) {
-      return res.status(400).json({
-        success: false,
-        message: "No active session. Please start a session first."
-      });
-    }
-
-    // Create packing log with petaniId from session
+    // Create packing log without session requirement
+    // petaniId is null, admin can assign later via verifyPacking endpoint
     const log = await prisma.packingLog.create({
       data: {
         weight: parseFloat(weight),
         deviceId: device.id,
-        petaniId: activeSession.petaniId
+        petaniId: null // Will be assigned by admin later
       },
       include: {
         petani: true
