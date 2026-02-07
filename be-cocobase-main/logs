@@ -1,0 +1,41 @@
+﻿--- THRESHOLD VERIFICATION TEST ---
+Target: https://be-cocobase-main.vercel.app/api/v1/iot/loadcell/ingest
+Device: 7400e85c-80ef-4352-8400-6361294d3050
+
+1. Sending initial weight (0.0 kg)...
+node : Error: 
+Request failed with 
+status code 500
+At line:1 char:1
++ node simulator-thre
+shold-test.js > 
+test_output.txt 2>&1
++ ~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~
+    + CategoryInfo   
+           : NotSpe  
+  cified: (Error:    
+ Request ...statu    
+s code 500:Strin    
+g) [], RemoteExc    
+eption
+    + FullyQualified 
+   ErrorId : Native  
+  CommandError
+ 
+Response: {
+  success: false,
+  message: '\n' +
+    'Invalid `prisma.
+device.findUnique()` 
+invocation:\n' +
+    '\n' +
+    '\n' +
+    'The column `Devi
+ce.relayThreshold` 
+does not exist in 
+the current 
+database.',
+  data: null
+}
