@@ -1,6 +1,6 @@
 const router = require('express').Router();
 
-// router.use('/auth', require('./admin.route')); // Admin/Auth Controller Missing
+router.use('/auth', require('./admin.route'));
 router.use('/petani', require('./petani.route'));
 // router.use('/produksi', require('./produksi.route')); // Produksi Controller Missing
 router.use('/dashboard', require('./dashboard.route'));
