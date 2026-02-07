@@ -9,7 +9,7 @@ export default function DeviceManagement() {
     const [devices, setDevices] = useState<any[]>([]);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [currentDevice, setCurrentDevice] = useState<any>(null);
-    const [formData, setFormData] = useState({ name: "", threshold: 10 });
+    const [formData, setFormData] = useState({ name: "", threshold: 10, relayThreshold: 10 });
 
     useEffect(() => {
         fetchDevices();
@@ -44,7 +44,7 @@ export default function DeviceManagement() {
             if (data.success) {
                 toast.success(`Device ${currentDevice ? "updated" : "created"} successfully`);
                 setIsModalOpen(false);
-                setFormData({ name: "", threshold: 10 });
+                setFormData({ name: "", threshold: 10, relayThreshold: 10 });
                 setCurrentDevice(null);
                 fetchDevices();
             }
@@ -81,7 +81,7 @@ export default function DeviceManagement() {
                 <button
                     onClick={() => {
                         setCurrentDevice(null);
-                        setFormData({ name: "", threshold: 10 });
+                        setFormData({ name: "", threshold: 10, relayThreshold: 10 });
                         setIsModalOpen(true);
                     }}
                     className="bg-[#00B69B] text-white px-4 py-2 rounded-md flex items-center gap-2 hover:bg-[#00947d] transition"
@@ -97,6 +97,7 @@ export default function DeviceManagement() {
                             <th className="px-6 py-4">Name</th>
                             <th className="px-6 py-4">Auth Token</th>
                             <th className="px-6 py-4">Threshold (kg)</th>
+                            <th className="px-6 py-4">Max (Relay) (kg)</th>
                             <th className="px-6 py-4">Actions</th>
                         </tr>
                     </thead>
@@ -113,11 +114,12 @@ export default function DeviceManagement() {
                                     </div>
                                 </td>
                                 <td className="px-6 py-4">{device.threshold} kg</td>
+                                <td className="px-6 py-4">{device.relayThreshold} kg</td>
                                 <td className="px-6 py-4 flex gap-3">
                                     <button
                                         onClick={() => {
                                             setCurrentDevice(device);
-                                            setFormData({ name: device.name, threshold: device.threshold });
+                                            setFormData({ name: device.name, threshold: device.threshold, relayThreshold: device.relayThreshold });
                                             setIsModalOpen(true);
                                         }}
                                         className="text-blue-500 hover:underline"
@@ -158,6 +160,17 @@ export default function DeviceManagement() {
                                     step="0.1"
                                     value={formData.threshold}
                                     onChange={(e) => setFormData({ ...formData, threshold: parseFloat(e.target.value) })}
+                                    className="w-full border rounded-md px-3 py-2"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium mb-1">Max Threshold (Relay) (kg)</label>
+                                <input
+                                    type="number"
+                                    required
+                                    step="0.1"
+                                    value={formData.relayThreshold}
+                                    onChange={(e) => setFormData({ ...formData, relayThreshold: parseFloat(e.target.value) })}
                                     className="w-full border rounded-md px-3 py-2"
                                 />
                             </div>

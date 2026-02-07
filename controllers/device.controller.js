@@ -21,6 +21,7 @@ const createDevice = async (req, res, next) => {
                 name,
                 token,
                 threshold: threshold ? parseFloat(threshold) : 10.0,
+                relayThreshold: req.body.relayThreshold ? parseFloat(req.body.relayThreshold) : 10.0,
                 calibrationFactor: 2280.0
             },
         });
@@ -39,6 +40,7 @@ const updateDevice = async (req, res, next) => {
             data: {
                 name,
                 threshold: threshold ? parseFloat(threshold) : undefined,
+                relayThreshold: req.body.relayThreshold ? parseFloat(req.body.relayThreshold) : undefined,
                 calibrationFactor: req.body.calibrationFactor ? parseFloat(req.body.calibrationFactor) : undefined
             },
         });

@@ -108,7 +108,8 @@ const ingestData = async (req, res, next) => {
     let responsePayload = {
       success: true,
       message: "Reading recorded",
-      threshold: device.threshold || 5.0
+      threshold: device.threshold || 5.0,
+      relayThreshold: device.relayThreshold || 10.0
     };
 
     if (device.pendingCommand) {

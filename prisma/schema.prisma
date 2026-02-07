@@ -170,6 +170,7 @@ model Device {
   name      String
   token     String   @unique
   threshold Float    @default(10.0)
+  relayThreshold Float @default(10.0)
   isReady   Boolean  @default(true)
   
   pendingCommand    String?  // JSON string for pending commands e.g. {"type": "TARE"}
