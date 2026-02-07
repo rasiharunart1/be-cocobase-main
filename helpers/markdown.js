@@ -1,9 +1,8 @@
-const showdown = require('showdown');
-const converter = new showdown.Converter();
+const { marked } = require('marked');
 
 const convertMarkdownToHtml = async (markdown) => {
     if (!markdown) return "";
-    return converter.makeHtml(markdown);
+    return marked.parse(markdown);
 };
 
 module.exports = {
