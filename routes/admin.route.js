@@ -1,5 +1,5 @@
 const router = require('express').Router();
-const { login, profile, register } = require('../controllers/admin.controller');
+const { login, profile, register } = require('../controllers-backup/admin.controller');
 const verifyToken = require('../middlewares/verifyToken');
 
 router.post('/login', login);

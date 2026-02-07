@@ -1,7 +1,7 @@
 const router = require('express').Router();
 const {
     dashboardAtas
-} = require('../controllers/dashboard.controller');
+} = require('../controllers-backup/dashboard.controller');
 
 router.get('/atas', dashboardAtas);
 

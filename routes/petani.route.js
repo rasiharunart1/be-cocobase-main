@@ -5,7 +5,7 @@ const {
     updatePetani,
     deletePetani,
     getPetaniById
-} = require('../controllers/petani.controller');
+} = require('../controllers-backup/petani.controller');
 const verifyToken = require('../middlewares/verifyToken');
 
 // Assuming admin needs to be authenticated to manage farmers, 
