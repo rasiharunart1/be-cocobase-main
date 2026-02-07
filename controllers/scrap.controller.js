@@ -20,7 +20,7 @@ const createScrap = async (req, res, next) => {
     if (error) {
       return handleErrorResponse(res, error);
     }
-    
+
     const existingScrap = await prisma.scrap.findFirst({
       where: {
         minggu_ke: value.minggu_ke,

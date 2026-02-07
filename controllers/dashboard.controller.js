@@ -257,4 +257,3 @@ const dashboardAtas = async (req, res, next) => {
 module.exports = {
   dashboardAtas,
 };
-
