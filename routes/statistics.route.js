@@ -1,5 +1,5 @@
 const router = require('express').Router();
-const { getPetaniStats, getLeaderboard, getAllPetaniStats } = require('../controllers-backup/statistics.controller');
+const { getPetaniStats, getLeaderboard, getAllPetaniStats } = require('../controllers/statistics.controller');
 
 router.get('/petani/:petaniId', getPetaniStats);
 router.get('/leaderboard', getLeaderboard);

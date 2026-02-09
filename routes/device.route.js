@@ -4,7 +4,7 @@ const {
     createDevice,
     updateDevice,
     deleteDevice
-} = require('../controllers-backup/device.controller');
+} = require('../controllers/device.controller');
 
 router.get('/', getDevices);
 router.post('/', createDevice);

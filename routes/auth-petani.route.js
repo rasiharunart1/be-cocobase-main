@@ -1,5 +1,5 @@
 const router = require('express').Router();
-const { login, setPassword, updateProfile } = require('../controllers-backup/auth-petani.controller');
+const { login, setPassword, updateProfile } = require('../controllers/auth-petani.controller');
 const verifyToken = require('../middlewares/verifyToken');
 
 router.post('/login', login);
