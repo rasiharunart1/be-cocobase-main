@@ -1,30 +1,22 @@
 /**
- * ESP32 Loadcell IoT System - Manual Packing Trigger
+ * Kartu Kendali ESP32 Loadcell IoT - Manual Packing dengan LCD & RELAY (v6.0
+ * CALIBRATION BUTTON)
  *
- * Features:
- * - Real-time weight monitoring (continuous data transmission)
- * - Manual packing trigger via push button
- * - Auto TARE after successful packing
- * - Remote calibration (TARE & CALIBRATE) via web dashboard
- * - EEPROM persistence for calibration factor
- * - WiFi auto-reconnect
- * - Session validation (backend checks for active session)
+ * PERUBAHAN v6.0 (User Request):
+ * - RESTORE COMMAND BUTTON -> GPIO 5
+ * - BUTTON PRESSED -> MODE KALIBRASI ON-DEMAND (Raw Reading)
+ * - BUTTON RELEASED -> KEMBALI KE BIASA
+ * - Tetap No Filter (Raw Data) & Web Control Relay
  *
  * Hardware:
  * - ESP32 Development Board
  * - HX711 Loadcell Amplifier
  * - Loadcell Sensor
- * - Push Button (Momentary)
+ * - Relay Module (Active HIGH/LOW configurable) -> GPIO 15
+ * - I2C LCD Display 16x2
+ * - Buzzer (Active/Passive)
+ * - Button (Momentary) -> GPIO 5
  *
- * Wiring:
- * - HX711 DOUT -> GPIO 16
- * - HX711 SCK  -> GPIO 4
- * - Button     -> GPIO 2 (D2)
- * - Button GND -> GND (with internal pull-up)
- * - LCD SDA    -> GPIO 21
- * - LCD SCL    -> GPIO 22
- * - LCD VCC    -> 5V
- * - LCD GND    -> GND
  */
 
 #include <ArduinoJson.h>
@@ -35,163 +27,221 @@
 #include <WiFi.h>
 #include <Wire.h>
 
+// ==================== KONFIGURASI LCD ====================
+const int LCD_COLS = 16;
+const int LCD_ROWS = 2;
+const int LCD_ADDRESS = 0x27;
 
-// ==================== CONFIGURATION ====================
+LiquidCrystal_I2C lcd(LCD_ADDRESS, LCD_COLS, LCD_ROWS);
 
-// WiFi Credentials
-const char *WIFI_SSID = "Harun";         // GANTI dengan nama WiFi Anda
-const char *WIFI_PASSWORD = "harun3211"; // GANTI dengan password WiFi Anda
+// ==================== KONFIGURASI UTAMA ====================
 
-// Backend API Configuration
+// WiFi
+const char *WIFI_SSID = "Harun";
+const char *WIFI_PASSWORD = "harun3211";
+
+// Backend API
 const char *API_URL_INGEST =
     "https://be-cocobase-main.vercel.app/api/v1/iot/loadcell/ingest";
-const char *API_URL_PACK =
-    "https://be-cocobase-main.vercel.app/api/v1/iot/loadcell/pack";
-const char *DEVICE_TOKEN =
-    "7400e85c-80ef-4352-8400-6361294d3050"; // DAPATKAN dari halaman Device
-                                            // Management
 
-// HX711 Loadcell Pins
+const char *DEVICE_TOKEN = "7400e85c-80ef-4352-8400-6361294d3050";
+
+// Hardware Pins
 const int LOADCELL_DOUT_PIN = 16;
 const int LOADCELL_SCK_PIN = 4;
+const int BUZZER_PIN = 2; // D2 (GPIO 2)
+const int RELAY_PIN = 15; // PIN RELAY
+const int BUTTON_PIN = 5; // CALIBRATION BUTTON (Baru/Restore)
 
-// Push Button Pin
-const int BUTTON_PIN =
-    2; // GPIO 2 (D2) - LED built-in mungkin berkedip saat button ditekan
-
-// Timing Configuration
-const unsigned long SEND_INTERVAL = 1000; // Send weight data every 1 second
+// Konfigurasi Waktu
+const unsigned long SEND_INTERVAL = 100;
 const unsigned long WIFI_RECONNECT_INTERVAL = 30000;
 
-// EEPROM Configuration
+// Konfigurasi EEPROM
 const int EEPROM_SIZE = 512;
 const int CAL_FACTOR_ADDR = 0;
+float DEFAULT_CALIBRATION_FACTOR = 200.7046666666667;
 
-// Default Calibration Factor
-float DEFAULT_CALIBRATION_FACTOR = 2280.0;
+// Satuan Berat
+const bool USE_KILOGRAMS = false;
+const float GRAM_TO_KG = 1000.0;
 
-// ==================== GLOBAL VARIABLES ====================
+// ==================== VARIABEL GLOBAL ====================
 
 HX711 scale;
 float calibrationFactor = DEFAULT_CALIBRATION_FACTOR;
+float targetThreshold = 5.0;
+float relayThreshold = 10.0;
+
 unsigned long lastSendTime = 0;
 unsigned long lastWiFiCheckTime = 0;
 bool isWiFiConnected = false;
 
-// Button debouncing
+// Status Buzzer & Relay
+bool buzzerActive = false;
+bool isRelayOn = false;
+
+// Button & Calibration State
 bool lastButtonState = HIGH;
-bool buttonState = HIGH;
-unsigned long lastDebounceTime = 0;
-const unsigned long debounceDelay = 50;
+bool isCalibrating = false;
 
-// Button press state tracking
-bool waitingForTare =
-    false; // True after successful packing save, waiting for TARE button press
+// Debug timer
+unsigned long lastDebugTime = 0;
 
-// ==================== HELPER FUNCTIONS ====================
+// ==================== FUNGSI MONITOR MEMORI ====================
 
-void saveCalibrationFactor(float factor) {
-  EEPROM.put(CAL_FACTOR_ADDR, factor);
-  EEPROM.commit();
-  Serial.println("✓ Calibration factor saved to EEPROM: " + String(factor));
+void printMemoryInfo() {
+  Serial.printf("Free Heap: %d bytes | Min Free Heap: %d bytes\n",
+                ESP.getFreeHeap(), ESP.getMinFreeHeap());
 }
 
-float loadCalibrationFactor() {
-  float factor;
-  EEPROM.get(CAL_FACTOR_ADDR, factor);
+// ==================== UPDATE RELAY ====================
 
-  if (isnan(factor) || factor == 0 || factor < 0) {
-    Serial.println("⚠ EEPROM empty or invalid, using default factor");
-    return DEFAULT_CALIBRATION_FACTOR;
+void setRelay(bool state) {
+  if (state) {
+    digitalWrite(RELAY_PIN, HIGH);
+    isRelayOn = true;
+    Serial.println("✅ RELAY ON (Web)");
+  } else {
+    digitalWrite(RELAY_PIN, LOW);
+    isRelayOn = false;
+    Serial.println("🛑 RELAY OFF (Web)");
+  }
+}
+
+// ==================== BACA BERAT (RAW / NO FILTER) ====================
+
+float getWeight() {
+  if (!scale.is_ready())
+    return 0.0;
+  float rawWeight = scale.get_units(1);
+  if (abs(rawWeight) < 2.0)
+    rawWeight = 0.0;
+  return rawWeight;
+}
+
+String formatWeight(float weight) {
+  char buffer[16];
+  if (USE_KILOGRAMS) {
+    dtostrf(weight, 6, 4, buffer);
+    return String(buffer) + " kg";
+  } else {
+    dtostrf(weight, 6, 1, buffer);
+    return String(buffer) + " g";
+  }
+}
+
+// ==================== ALARM & RELAY LOGIC ====================
+
+void checkThresholdAlert(float currentWeightInGrams) {
+  float currentWeightKg = currentWeightInGrams / GRAM_TO_KG;
+
+  if (isRelayOn && currentWeightKg >= relayThreshold) {
+    Serial.printf("🛑 AUTO-STOP: %.4f >= %.4f\n", currentWeightKg,
+                  relayThreshold);
+    setRelay(false);
   }
 
-  Serial.println("✓ Loaded calibration factor from EEPROM: " + String(factor));
-  return factor;
+  if (currentWeightKg >= targetThreshold) {
+    if (!buzzerActive) {
+      buzzerActive = true;
+      digitalWrite(BUZZER_PIN, HIGH);
+    }
+  } else if (currentWeightKg < targetThreshold) {
+    if (buzzerActive) {
+      buzzerActive = false;
+      digitalWrite(BUZZER_PIN, LOW);
+    }
+  }
 }
 
-// LCD Display Functions
+// ==================== FUNGSI LCD ====================
+
 void updateLCDWeight(float weight) {
   lcd.setCursor(0, 0);
-  lcd.print("Berat: ");
-
-  // Format weight with 2 decimal places, right-aligned
-  char weightStr[10];
-  dtostrf(weight, 6, 2, weightStr);
+  String weightStr = formatWeight(weight);
   lcd.print(weightStr);
-  lcd.print(" kg");
-
-  // Clear remaining characters on line
-  for (int i = lcd.getCursorColumn(); i < LCD_COLS; i++) {
+  for (int i = weightStr.length(); i < LCD_COLS; i++)
     lcd.print(" ");
-  }
 }
 
 void updateLCDStatus(String status) {
   lcd.setCursor(0, 1);
+  if (status.length() > LCD_COLS)
+    status = status.substring(0, LCD_COLS);
   lcd.print(status);
-
-  // Clear remaining characters on line
-  for (int i = status.length(); i < LCD_COLS; i++) {
+  for (int i = status.length(); i < LCD_COLS; i++)
     lcd.print(" ");
-  }
 }
 
 void showLCDMessage(String line1, String line2 = "") {
   lcd.clear();
   lcd.setCursor(0, 0);
+  if (line1.length() > LCD_COLS)
+    line1 = line1.substring(0, LCD_COLS);
   lcd.print(line1);
+
   if (line2.length() > 0) {
     lcd.setCursor(0, 1);
+    if (line2.length() > LCD_COLS)
+      line2 = line2.substring(0, LCD_COLS);
     lcd.print(line2);
   }
 }
 
-void connectToWiFi() {
-  Serial.println("\n========================================");
-  Serial.println("Connecting to WiFi: " + String(WIFI_SSID));
-  Serial.println("========================================");
+// ==================== KONFIGURASI & WIFI ====================
 
+void saveCalibrationFactor(float factor) {
+  EEPROM.put(CAL_FACTOR_ADDR, factor);
+  EEPROM.commit();
+}
+
+float loadCalibrationFactor() {
+  float factor;
+  EEPROM.get(CAL_FACTOR_ADDR, factor);
+  if (isnan(factor) || factor == 0 || factor < 0)
+    return DEFAULT_CALIBRATION_FACTOR;
+  return factor;
+}
+
+void connectToWiFi() {
+  showLCDMessage("Konek WiFi...", WIFI_SSID);
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
   int attempts = 0;
   while (WiFi.status() != WL_CONNECTED && attempts < 20) {
     delay(500);
-    Serial.print(".");
     attempts++;
   }
 
   if (WiFi.status() == WL_CONNECTED) {
     isWiFiConnected = true;
-    Serial.println("\n✓ WiFi Connected!");
-    Serial.println("IP Address: " + WiFi.localIP().toString());
+    showLCDMessage("WiFi Terhubung", WiFi.localIP().toString());
+    delay(2000);
   } else {
     isWiFiConnected = false;
-    Serial.println("\n✗ WiFi Connection Failed!");
+    showLCDMessage("Gagal WiFi!", "Cek setelan");
+    delay(2000);
   }
 }
 
 void checkWiFiConnection() {
   if (WiFi.status() != WL_CONNECTED) {
-    if (isWiFiConnected) {
-      Serial.println("⚠ WiFi connection lost!");
+    if (isWiFiConnected)
       isWiFiConnected = false;
-    }
-
     if (millis() - lastWiFiCheckTime >= WIFI_RECONNECT_INTERVAL) {
-      Serial.println("Attempting to reconnect to WiFi...");
       connectToWiFi();
       lastWiFiCheckTime = millis();
     }
   } else {
-    if (!isWiFiConnected) {
-      Serial.println("✓ WiFi reconnected!");
+    if (!isWiFiConnected)
       isWiFiConnected = true;
-    }
   }
 }
 
-// Send weight data for monitoring (no log creation)
+// ==================== KIMIM DATA BERAT & CEK COMMAND ====================
+
 void sendWeightData(float weight) {
   if (!isWiFiConnected)
     return;
@@ -199,11 +249,13 @@ void sendWeightData(float weight) {
   HTTPClient http;
   http.begin(API_URL_INGEST);
   http.addHeader("Content-Type", "application/json");
-  http.setTimeout(10000);
+  http.setTimeout(3000);
 
-  StaticJsonDocument<256> doc;
+  float weightToSend = weight / GRAM_TO_KG;
+
+  JsonDocument doc;
   doc["token"] = DEVICE_TOKEN;
-  doc["weight"] = round(weight * 100) / 100.0;
+  doc["weight"] = round(weightToSend * 10000) / 10000.0;
 
   String jsonPayload;
   serializeJson(doc, jsonPayload);
@@ -212,235 +264,148 @@ void sendWeightData(float weight) {
 
   if (httpResponseCode > 0) {
     String response = http.getString();
+    JsonDocument responseDoc;
+    deserializeJson(responseDoc, response);
 
-    // Check for pending command
-    StaticJsonDocument<512> responseDoc;
-    DeserializationError error = deserializeJson(responseDoc, response);
+    if (responseDoc.containsKey("threshold")) {
+      float newThreshold = responseDoc["threshold"].as<float>();
+      if (newThreshold > 0)
+        targetThreshold = newThreshold;
+    }
 
-    if (!error && responseDoc.containsKey("command")) {
-      JsonObject cmd = responseDoc["command"];
-      String commandType = cmd["type"].as<String>();
+    if (responseDoc.containsKey("relayThreshold")) {
+      float newRelayThreshold = responseDoc["relayThreshold"].as<float>();
+      if (newRelayThreshold > 0)
+        relayThreshold = newRelayThreshold;
+    }
 
-      Serial.println("\n========================================");
-      Serial.println("📥 COMMAND RECEIVED: " + commandType);
-      Serial.println("========================================");
-
-      if (commandType == "TARE") {
-        Serial.println("Executing TARE (Reset to Zero)...");
-        scale.tare();
-        Serial.println("✓ TARE Complete");
-      } else if (commandType == "CALIBRATE") {
-        if (cmd.containsKey("value")) {
-          float newFactor = cmd["value"].as<float>();
-
-          Serial.println("Executing CALIBRATION...");
-          Serial.println("Old Factor: " + String(calibrationFactor));
-          Serial.println("New Factor: " + String(newFactor));
-
-          calibrationFactor = newFactor;
-          scale.set_scale(calibrationFactor);
-          saveCalibrationFactor(calibrationFactor);
-
-          Serial.println("✓ CALIBRATION Complete");
+    if (responseDoc.containsKey("command") &&
+        responseDoc["command"].is<JsonObject>()) {
+      JsonObject cmd = responseDoc["command"].as<JsonObject>();
+      if (cmd.containsKey("type")) {
+        String commandType = cmd["type"].as<String>();
+        if (commandType == "TARE") {
+          scale.tare();
+        } else if (commandType == "START_RELAY") {
+          setRelay(true);
+        } else if (commandType == "STOP_RELAY") {
+          setRelay(false);
+        } else if (commandType == "CALIBRATE") {
+          if (cmd.containsKey("value")) {
+            calibrationFactor = cmd["value"].as<float>();
+            scale.set_scale(calibrationFactor);
+            saveCalibrationFactor(calibrationFactor);
+          }
         }
       }
-
-      Serial.println("========================================\n");
     }
 
-  } else {
-    Serial.printf("✗ HTTP Error: %d\n", httpResponseCode);
-  }
-
-  http.end();
-}
-
-// Send packing data (creates log if session active)
-void sendPackingData(float weight) {
-  if (!isWiFiConnected) {
-    Serial.println("⚠ WiFi not connected, cannot send packing data");
-    return;
-  }
-
-  Serial.println("\n========================================");
-  Serial.println("📦 BUTTON PRESS #1 - SAVING PACKING DATA");
-  Serial.println("========================================");
-  Serial.printf("Weight: %.2f kg\n", weight);
-  Serial.println("Sending to backend...");
-
-  HTTPClient http;
-  http.begin(API_URL_PACK);
-  http.addHeader("Content-Type", "application/json");
-  http.setTimeout(10000);
-
-  StaticJsonDocument<256> doc;
-  doc["token"] = DEVICE_TOKEN;
-  doc["weight"] = round(weight * 100) / 100.0;
-
-  String jsonPayload;
-  serializeJson(doc, jsonPayload);
-
-  int httpResponseCode = http.POST(jsonPayload);
-
-  if (httpResponseCode > 0) {
-    String response = http.getString();
-    Serial.printf("HTTP: %d | Response: %s\n", httpResponseCode,
-                  response.c_str());
-
-    StaticJsonDocument<512> responseDoc;
-    DeserializationError error = deserializeJson(responseDoc, response);
-
-    if (!error) {
-      bool success = responseDoc["success"];
-      String message = responseDoc["message"].as<String>();
-
-      if (success) {
-        Serial.println("✓ " + message);
-        Serial.println("\n⏳ WAITING FOR BUTTON PRESS #2 TO TARE...");
-        Serial.println("   Press button again to reset scale to 0 kg");
-        waitingForTare = true; // Set flag to wait for second button press
-      } else {
-        Serial.println("✗ " + message);
-        Serial.println("⚠ Fix the issue and try again");
-        waitingForTare = false;
+    // LCD Standard Update
+    if (!isCalibrating) {
+      updateLCDWeight(weight);
+      if (isRelayOn)
+        updateLCDStatus("⚡ MENGISI... ⚡");
+      else if (buzzerActive)
+        updateLCDStatus("🔴 PENUH! >=Bts");
+      else {
+        char buf[16];
+        snprintf(buf, sizeof(buf), "Target: %.2f kg", targetThreshold);
+        updateLCDStatus(String(buf));
       }
     }
-
-  } else {
-    Serial.printf("✗ HTTP Error: %d\n", httpResponseCode);
-    Serial.println("⚠ Packing not recorded");
-    waitingForTare = false;
   }
-
-  Serial.println("========================================\n");
   http.end();
-}
-
-// Perform TARE (reset scale to zero)
-void performTare() {
-  Serial.println("\n========================================");
-  Serial.println("🔄 BUTTON PRESS #2 - PERFORMING TARE");
-  Serial.println("========================================");
-  Serial.println("Resetting scale to 0 kg...");
-
-  scale.tare();
-
-  Serial.println("✓ TARE Complete!");
-  Serial.println("✓ Scale reset to 0 kg");
-  Serial.println("✓ Ready for next packing\n");
-  Serial.println("========================================\n");
-
-  waitingForTare = false; // Reset flag
 }
 
 // ==================== SETUP ====================
 
 void setup() {
   Serial.begin(115200);
-  delay(1000);
 
-  Serial.println("\n\n");
-  Serial.println("========================================");
-  Serial.println("  ESP32 Loadcell - Manual Packing v1.0");
-  Serial.println("========================================");
+  pinMode(BUZZER_PIN, OUTPUT);
+  digitalWrite(BUZZER_PIN, LOW);
+  pinMode(RELAY_PIN, OUTPUT);
+  digitalWrite(RELAY_PIN, LOW);
+  pinMode(BUTTON_PIN, INPUT_PULLUP); // RESTORED BUTTON
 
-  // Initialize EEPROM
-  Serial.println("\n[1/5] Initializing EEPROM...");
+  Wire.begin(21, 22);
+  lcd.init();
+  lcd.backlight();
+  showLCDMessage("Cocobase v6.0", "Calibration Mode");
+  delay(2000);
+
   EEPROM.begin(EEPROM_SIZE);
   calibrationFactor = loadCalibrationFactor();
 
-  // Initialize Button
-  Serial.println("\n[2/5] Initializing Push Button...");
-  pinMode(BUTTON_PIN, INPUT_PULLUP);
-  Serial.println("✓ Button configured on GPIO " + String(BUTTON_PIN));
-  Serial.println("  Press button to save packing data");
-
-  // Initialize Loadcell
-  Serial.println("\n[3/5] Initializing HX711 Loadcell...");
   scale.begin(LOADCELL_DOUT_PIN, LOADCELL_SCK_PIN);
-
   if (scale.is_ready()) {
-    Serial.println("✓ HX711 detected and ready");
-
     scale.set_scale(calibrationFactor);
-    Serial.println("Calibration factor: " + String(calibrationFactor));
-
-    Serial.println("Performing auto-tare...");
     scale.tare();
-    delay(1000);
-
-    Serial.println("✓ Loadcell initialized");
-
-  } else {
-    Serial.println("✗ HX711 not detected! Check wiring");
   }
 
-  // Connect to WiFi
-  Serial.println("\n[4/5] Connecting to WiFi...");
   connectToWiFi();
-
-  // Final setup
-  Serial.println("\n[5/5] Setup Complete!");
-  Serial.println("========================================");
-  Serial.println("Device Token: " + String(DEVICE_TOKEN));
-  Serial.println("Monitoring URL: " + String(API_URL_INGEST));
-  Serial.println("Packing URL: " + String(API_URL_PACK));
-  Serial.println("========================================");
-  Serial.println("\n🚀 System Ready!");
-  Serial.println("- Weight data sent every " + String(SEND_INTERVAL) + "ms");
-  Serial.println("- Press button to record packing\n");
-
-  delay(2000);
 }
 
-// ==================== MAIN LOOP ====================
+// ==================== LOOP UTAMA ====================
 
 void loop() {
-  // Check WiFi connection
-  checkWiFiConnection();
+  // 1. CEK TOMBOL KALIBRASI
+  int btnState = digitalRead(BUTTON_PIN);
 
-  // Read button state with debouncing
-  int reading = digitalRead(BUTTON_PIN);
+  // Jika tombol ditekan (LOW) -> Masuk Mode Kalibrasi
+  if (btnState == LOW) {
+    if (!isCalibrating) {
+      // Init Calibration
+      isCalibrating = true;
+      setRelay(false); // Safety
 
-  if (reading != lastButtonState) {
-    lastDebounceTime = millis();
-  }
+      showLCDMessage("KALIBRASI...", "Angkat Beban!");
+      Serial.println("ENTRY CALIBRATION: Removing weights...");
 
-  if ((millis() - lastDebounceTime) > debounceDelay) {
-    if (reading != buttonState) {
-      buttonState = reading;
+      scale.set_scale(); // Reset scale to 1 (Raw)
+      delay(2000);       // Wait for stability
+      scale.tare();      // Zero with no weight
 
-      // Button pressed (LOW because of pull-up)
-      if (buttonState == LOW) {
-        if (waitingForTare) {
-          // Second button press - perform TARE
-          performTare();
-        } else {
-          // First button press - save packing data
-          if (scale.is_ready()) {
-            float weight =
-                scale.get_units(10); // More averaging for button press
-            sendPackingData(weight);
-          } else {
-            Serial.println("⚠ HX711 not ready, cannot record packing");
-          }
-        }
+      showLCDMessage("TARUH BEBAN", "Tahan Tombol...");
+      Serial.println("TARE DONE. Place known weight.");
+      delay(2000);
+    }
+
+    // Loop Kalibrasi: Tampilkan Raw Value Terus menerus
+    long reading = scale.get_units(10); // Average 10 readings for stability
+
+    lcd.setCursor(0, 0);
+    lcd.print("RAW VALUE:      ");
+    lcd.setCursor(0, 1);
+    lcd.print(String(reading) + "       ");
+
+    Serial.print("Calibration Raw Reading: ");
+    Serial.println(reading);
+    delay(200);
+
+  } else {
+    // Tombol Dilepas (HIGH)
+    if (isCalibrating) {
+      // Exit Calibration
+      isCalibrating = false;
+      scale.set_scale(calibrationFactor); // Restore Factor
+      showLCDMessage("Selesai Kalibr.", "Sistem Siap");
+      Serial.println("EXIT CALIBRATION. Restored Factor.");
+      delay(2000);
+    }
+
+    // Normal Operation
+    checkWiFiConnection();
+
+    if (millis() - lastSendTime >= SEND_INTERVAL) {
+      if (scale.is_ready()) {
+        float weight = getWeight();
+        checkThresholdAlert(weight);
+        sendWeightData(weight);
       }
+      lastSendTime = millis();
     }
-  }
-
-  lastButtonState = reading;
-
-  // Send weight data for monitoring at regular interval
-  if (millis() - lastSendTime >= SEND_INTERVAL) {
-    if (scale.is_ready()) {
-      float weight = scale.get_units(5);
-      sendWeightData(weight);
-    }
-    lastSendTime = millis();
   }
 
   delay(10);
 }
-
-// ==================== END OF CODE ====================

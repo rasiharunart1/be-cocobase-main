@@ -153,12 +153,16 @@ const updatePetani = async (req, res, next) => {
       });
     }
 
+    // Extract password from value to prevent overwriting with empty string
+    const { password, ...restValue } = value;
+
     let dataToUpdate = {
       id_admin,
-      ...value,
+      ...restValue,
       no_hp: formatNomorHP(value.no_hp),
     };
 
+    // Only update password if a new one is provided
     if (req.body.password && req.body.password !== "") {
       const salt = await bcrypt.genSalt(10);
       dataToUpdate.password = await bcrypt.hash(req.body.password, salt);
