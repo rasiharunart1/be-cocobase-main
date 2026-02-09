@@ -10,11 +10,30 @@ const path = require('path');
 const { serverError, notFound } = require('./middlewares/errorHandling');
 const PORT = process.env.PORT || 3000;
 
-app.use(
-  cors({
-    origin: '*',
-  })
-);
+const corsOptions = {
+  origin: ['http://localhost:3000', 'https://cocobase-ui-sandy.vercel.app', 'https://cocobase-ui.vercel.app'],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin']
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
+
+// Explicitly set headers for Vercel/proxies just in case
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (corsOptions.origin.includes(origin)) {
+    res.header('Access-Control-Allow-Origin', origin);
+    res.header('Access-Control-Allow-Credentials', 'true');
+  }
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin');
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+  next();
+});
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan('dev'));

@@ -1,0 +1,29 @@
+﻿commit ad284e03e2cf40561d079dce6c73a1ed5a6f24c6
+Author: rasiharunart1 <2211102080@ittelkom-pwt.ac.id>
+Date:   Tue Feb 10 05:09:09 2026 +0700
+
+    solve cors
+
+commit b0d79557461599b387ab4223b3f3d1f8f1ae93d4
+Author: rasiharunart1 <2211102080@ittelkom-pwt.ac.id>
+Date:   Tue Feb 10 05:03:45 2026 +0700
+
+    solve cors
+
+commit 289d3a8ed1eb3decb6d737356b2ecebfdf3b9acd
+Author: rasiharunart1 <2211102080@ittelkom-pwt.ac.id>
+Date:   Tue Feb 10 04:58:53 2026 +0700
+
+    solve cors
+
+commit c88c2ad8328b99ad04dd6993cd42d652a0e180d8
+Author: rasiharunart1 <2211102080@ittelkom-pwt.ac.id>
+Date:   Tue Feb 10 04:19:02 2026 +0700
+
+    fixing petani auth
+
+commit 626e50983f05bbd8110bd4eb1461fa2dcaea632d
+Author: rasiharunart1 <2211102080@ittelkom-pwt.ac.id>
+Date:   Tue Feb 10 04:12:13 2026 +0700
+
+    new

@@ -1,0 +1,19 @@
+﻿git : Everything 
+up-to-date
+At line:1 char:1
++ git push origin 
+main --force > 
+push_output.txt 2>&1
++ ~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~
+    + CategoryInfo   
+           : NotSpe  
+  cified: (Everyth   
+ ing up-to-date:S    
+tring) [], Remot    
+eException
+    + FullyQualified 
+   ErrorId : Native  
+  CommandError
+ 
