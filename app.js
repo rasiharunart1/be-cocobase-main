@@ -3,10 +3,6 @@ const express = require('express');
 const app = express();
 const morgan = require('morgan');
 const cors = require('cors');
-const yaml = require('yaml');
-const swaggerUi = require('swagger-ui-express');
-const fs = require('fs');
-const path = require('path');
 const { serverError, notFound } = require('./middlewares/errorHandling');
 const PORT = process.env.PORT || 3000;
 
@@ -24,25 +20,25 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan('dev'));
 
-
-try {
-  const file = fs.readFileSync(path.join(__dirname, './docs.yaml'), 'utf8');
-  const swaggerDocument = yaml.parse(file);
-  app.use(
-    '/docs',
-    swaggerUi.serve,
-    swaggerUi.setup(swaggerDocument, {
-      customCssUrl: 'https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/4.15.5/swagger-ui.min.css',
-      customJs: ['https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/4.15.5/swagger-ui-bundle.js', 'https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/4.15.5/swagger-ui-standalone-preset.js'],
-      customSiteTitle: 'Cocobase API Documentation 🚀',
-    })
-  );
-} catch (error) {
-  console.error('Failed to load Swagger documentation:', error.message);
-  // Continue without swagger docs
-}
+// Temporarily disable swagger to avoid potential crash
+// try {
+//   const yaml = require('yaml');
+//   const swaggerUi = require('swagger-ui-express');
+//   const fs = require('fs');
+//   const path = require('path');
+//   const file = fs.readFileSync(path.join(__dirname, './docs.yaml'), 'utf8');
+//   const swaggerDocument = yaml.parse(file);
+//   app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument, {
+//     customCssUrl: 'https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/4.15.5/swagger-ui.min.css',
+//     customJs: ['https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/4.15.5/swagger-ui-bundle.js', 'https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/4.15.5/swagger-ui-standalone-preset.js'],
+//     customSiteTitle: 'Cocobase API Documentation 🚀',
+//   }));
+// } catch (error) {
+//   console.error('Failed to load Swagger documentation:', error.message);
+// }
 
 app.use('/api/v1', require('./routes/index.route'));
+
 app.get('/', (req, res) => {
   res.json({
     success: true,
@@ -52,15 +48,6 @@ app.get('/', (req, res) => {
   });
 });
 
-app.get('/api/v1/debug-db', async (req, res) => {
-  const prisma = require('./libs/prisma');
-  try {
-    const devices = await prisma.device.findMany({ take: 5 });
-    res.json({ success: true, count: devices.length, sample: devices[0] });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message, stack: err.stack });
-  }
-});
 app.use(notFound);
 app.use(serverError);
 
