@@ -16,8 +16,8 @@ const verifyToken = require('../middlewares/verifyToken');
 
 router.get('/', getAllPetani);
 router.get('/:id', getPetaniById);
-router.post('/', createPetani); // Usually requires auth
-router.put('/:id', updatePetani); // Usually requires auth
-router.delete('/:id', deletePetani); // Usually requires auth
+router.post('/', verifyToken, createPetani); // Auth required
+router.put('/:id', verifyToken, updatePetani); // Auth required
+router.delete('/:id', verifyToken, deletePetani); // Auth required
 
 module.exports = router;
