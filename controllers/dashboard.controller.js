@@ -160,9 +160,12 @@ const dashboardAtas = async (req, res, next) => {
       select: { id: true, nama: true }
     });
 
-    // Get IoT Packing Stats Per Farmer (including Unassigned)
+    // Get IoT Packing Stats Per Farmer (only verified logs with petaniId)
     const iotStatsPerPetani = await prisma.packingLog.groupBy({
       by: ['petaniId'],
+      where: {
+        petaniId: { not: null }  // Only count verified/assigned logs
+      },
       _count: { id: true },
       _sum: { weight: true },
     });
@@ -192,21 +195,8 @@ const dashboardAtas = async (req, res, next) => {
       };
     });
 
-    // Handle Unassigned Logs
-    const unassignedIot = iotStatsPerPetani.find(s => s.petaniId === null);
-    if (unassignedIot) {
-      petaniPerformance.push({
-        id: 0,
-        nama: "Unassigned/Antrian IoT",
-        iotWeight: unassignedIot._sum.weight || 0,
-        iotPackCount: unassignedIot._count.id || 0,
-        stages: { diayak: 0, dioven: 0, disortir: 0, dikemas: 0, selesai: 0 }
-      });
-    }
-
-    // Top 5 based on IoT Weight
+    // Top 5 based on verified IoT Weight
     const topFarmers = [...petaniPerformance]
-      .filter(p => p.id !== 0) // Exclude unassigned from leaderboard
       .sort((a, b) => b.iotWeight - a.iotWeight)
       .slice(0, 5)
       .map((p, index) => ({
