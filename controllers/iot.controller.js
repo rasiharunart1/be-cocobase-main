@@ -149,18 +149,23 @@ const ingestData = async (req, res, next) => {
     // Debugging
     console.log(`[IoT] Ingest: ${weight}kg. Last: ${lastLoggedWeight}kg. Th: ${threshold}kg.`);
 
-    // 3. REALTIME SNAPSHOT LOGIC
-    // Logic: If weight crosses the next threshold, just log the CURRENT weight once.
-    // No bulk generation. 0 -> 28kg = Only log 28kg.
+    // 3. HIGH FREQUENCY LOGGING LOGIC
+    // Requirement: "Threshold 5kg : 5.01kg. 5.10kg. 5.6kg dst"
+    // Logic: Once currentWeight >= Threshold, log every SMALL change (e.g. 0.1kg).
 
     // ONLY RUN LOGGING IF REQ says Machine is ON
     const isRelayOn = req.body.isRelayOn === true || req.body.isRelayOn === "true";
 
     const logsToCreate = [];
 
-    // Check if we passed the threshold relative to last log
-    // And ensure we don't log if we already hit max (handled by STOP logic, but good to check here too)
-    if (currentWeight >= (lastLoggedWeight + threshold) && currentWeight < relayThreshold) {
+    // Define Small Step for "Realtime" feel (e.g. 0.1kg)
+    const RECORD_STEP = 0.1;
+
+    // Condition 1: Must be above the Start Threshold (e.g. 5kg)
+    // Condition 2: Must have increased by at least RECORD_STEP from last log
+    // Condition 3: Must be below Relay/Max Threshold
+
+    if (currentWeight >= threshold && currentWeight >= (lastLoggedWeight + RECORD_STEP) && currentWeight < relayThreshold) {
 
       if (isRelayOn) {
         logsToCreate.push({
@@ -169,12 +174,12 @@ const ingestData = async (req, res, next) => {
           petaniId: null,
           createdAt: new Date()
         });
-        console.log(`[IoT] Snapshot Log: ${currentWeight}kg (Threshold passed)`);
+        console.log(`[IoT] Realtime Log: ${currentWeight}kg (Base Th: ${threshold}, Step: ${RECORD_STEP})`);
       }
     }
 
     if (logsToCreate.length === 0) {
-      if (!isRelayOn && currentWeight > threshold && currentWeight >= (lastLoggedWeight + threshold)) {
+      if (!isRelayOn && currentWeight > threshold && currentWeight >= (lastLoggedWeight + RECORD_STEP)) {
         console.log(`[IoT] Skipped log because Machine is OFF. Weight: ${currentWeight}kg`);
       }
     }
