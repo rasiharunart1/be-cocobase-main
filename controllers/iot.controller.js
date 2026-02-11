@@ -149,44 +149,33 @@ const ingestData = async (req, res, next) => {
     // Debugging
     console.log(`[IoT] Ingest: ${weight}kg. Last: ${lastLoggedWeight}kg. Th: ${threshold}kg.`);
 
-    // 3. DELTA LOOP
+    // 3. REALTIME SNAPSHOT LOGIC
+    // Logic: If weight crosses the next threshold, just log the CURRENT weight once.
+    // No bulk generation. 0 -> 28kg = Only log 28kg.
+
     // ONLY RUN LOGGING IF REQ says Machine is ON
     const isRelayOn = req.body.isRelayOn === true || req.body.isRelayOn === "true";
 
-    // Always calculate targets, but only push to logsToCreate if machine is active
-    // OR if we hit the RelayThreshold (which means we just finished a batch)
-
-    let nextTarget = lastLoggedWeight + threshold;
     const logsToCreate = [];
 
-    // Safety: Prevent infinite loop if threshold is too small relative to gap
-    let safetyCounter = 0;
-    const MAX_LOOPS = 100;
+    // Check if we passed the threshold relative to last log
+    // And ensure we don't log if we already hit max (handled by STOP logic, but good to check here too)
+    if (currentWeight >= (lastLoggedWeight + threshold) && currentWeight < relayThreshold) {
 
-    // Use epsilon for float comparison logic
-    while (currentWeight >= (nextTarget - 0.01) && nextTarget < relayThreshold) {
-
-      // CRITICAL CHANGE: Only logs if Machine is ON
       if (isRelayOn) {
         logsToCreate.push({
-          weight: nextTarget,
+          weight: currentWeight, // Log the ACTUAL current weight
           deviceId: device.id,
           petaniId: null,
           createdAt: new Date()
         });
+        console.log(`[IoT] Snapshot Log: ${currentWeight}kg (Threshold passed)`);
       }
-
-      nextTarget += threshold;
-
-      safetyCounter++;
-      if (safetyCounter > MAX_LOOPS) break;
     }
 
-    if (logsToCreate.length > 0) {
-      console.log(`[IoT] Generated ${logsToCreate.length} rows. (Machine ON)`);
-    } else {
-      if (!isRelayOn && currentWeight > threshold) {
-        console.log(`[IoT] Skipped logs because Machine is OFF. Weight: ${currentWeight}kg`);
+    if (logsToCreate.length === 0) {
+      if (!isRelayOn && currentWeight > threshold && currentWeight >= (lastLoggedWeight + threshold)) {
+        console.log(`[IoT] Skipped log because Machine is OFF. Weight: ${currentWeight}kg`);
       }
     }
 
