@@ -101,9 +101,32 @@ const ingestData = async (req, res, next) => {
       return res.status(200).json({ success: true, message: "Device reset to ready" });
     }
 
+    // NEW LOGIC: Only log when ESP32 explicitly sends "LOG" event
+    const { event } = req.body;
+
+    if (event === "LOG" && device.isReady) {
+      // Create packing log automatically
+      await prisma.packingLog.create({
+        data: {
+          weight: parseFloat(weight),
+          deviceId: device.id,
+          petaniId: null // Admin will assign farmer later via dropdown
+        }
+      });
+
+      // Mark device as not ready to prevent duplicate logs
+      await prisma.device.update({
+        where: { id: device.id },
+        data: { isReady: false }
+      });
+    }
+
+    /* 
+    // OLD LOGIC (COMMENTED OUT): 
     // Automatic packing log creation when threshold is reached
     // threshold: Auto-log threshold - creates log automatically when weight >= this value
     // relayThreshold: Relay control threshold - ESP32 uses this to stop relay/motor
+    
     if (weight >= device.threshold && device.isReady) {
       // Create packing log automatically
       await prisma.packingLog.create({
@@ -120,6 +143,7 @@ const ingestData = async (req, res, next) => {
         data: { isReady: false }
       });
     }
+    */
 
     // Check for pending command and return thresholds to ESP32
     let responsePayload = {
