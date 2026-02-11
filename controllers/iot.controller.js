@@ -101,24 +101,87 @@ const ingestData = async (req, res, next) => {
       return res.status(200).json({ success: true, message: "Device reset to ready" });
     }
 
-    // NEW LOGIC: Only log when ESP32 explicitly sends "LOG" event
-    const { event } = req.body;
+    // --- BACKEND DRIVEN LOGGING LOGIC ---
 
-    if (event === "LOG" && device.isReady) {
-      // Create packing log automatically
-      await prisma.packingLog.create({
-        data: {
-          weight: parseFloat(weight),
+    // 1. Get Device Thresholds
+    const threshold = device.threshold || 10.0;
+    const relayThreshold = device.relayThreshold || 50.0;
+    const currentWeight = parseFloat(weight);
+
+    // 2. Get Last Log to determine "Base Weight"
+    const latestLog = await prisma.packingLog.findFirst({
+      where: { deviceId: device.id },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    let lastLoggedWeight = 0;
+
+    // Logic: If the latest log is recent (same batch), use its weight.
+    // If the machine was emptied (currentWeight ~ 0), we effectively reset.
+    // However, finding "Reset" state is tricky stateless.
+    // Simple heuristic: If current weight is drastically LOWER than last log, assume reset (don't use last log).
+
+    if (latestLog) {
+      if (currentWeight >= latestLog.weight) {
+        lastLoggedWeight = latestLog.weight;
+      } else {
+        // Weight dropped (Reset happened). Base is 0.
+        lastLoggedWeight = 0;
+      }
+    }
+
+    // 3. Check if we crossed thresholds
+    // Example: Last=0, Current=28, Th=10. -> Targets: 10, 20.
+    let nextTarget = lastLoggedWeight + threshold;
+    const logsToCreate = [];
+
+    // Loop to find all crossed thresholds
+    while (currentWeight >= nextTarget && nextTarget < relayThreshold) {
+      logsToCreate.push({
+        weight: nextTarget, // We log the TARGET (ideal), or should we log current? User wanted "rows" per step. Target is cleaner (10, 20).
+        deviceId: device.id,
+        petaniId: null,
+        createdAt: new Date() // Set explicit time to keep order if bulk inserting
+      });
+      nextTarget += threshold;
+    }
+
+    // 4. STOP Logic (Max Threshold)
+    // If we hit relay threshold, ensuring we log the final "Max" state one-off
+    // (Only if we haven't logged it close enough yet)
+    if (currentWeight >= relayThreshold) {
+      // Check if we already logged something close to relayThreshold
+      if (Math.abs(lastLoggedWeight - currentWeight) > 1.0) {
+        logsToCreate.push({
+          weight: currentWeight,
           deviceId: device.id,
-          petaniId: null // Admin will assign farmer later via dropdown
-        }
+          petaniId: null
+        });
+      }
+    }
+
+    // 5. Bulk Insert Logs
+    if (logsToCreate.length > 0) {
+      console.log(`Generating ${logsToCreate.length} logs for device ${device.id}`);
+      await prisma.packingLog.createMany({
+        data: logsToCreate
       });
 
-      // Mark device as not ready to prevent duplicate logs
-      await prisma.device.update({
-        where: { id: device.id },
-        data: { isReady: false }
-      });
+      // Update Device Ready Status (optional, if used for UI)
+      if (currentWeight >= relayThreshold) {
+        await prisma.device.update({
+          where: { id: device.id },
+          data: { isReady: false }
+        });
+      }
+    } else {
+      // If weight dropped to 0, mark ready again
+      if (currentWeight <= 0.5 && !device.isReady) {
+        await prisma.device.update({
+          where: { id: device.id },
+          data: { isReady: true }
+        });
+      }
     }
 
     /* 
