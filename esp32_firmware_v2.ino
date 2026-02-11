@@ -153,6 +153,7 @@ void sendData(float weight) {
   JsonDocument doc;
   doc["token"] = DEVICE_TOKEN;
   doc["weight"] = weight;
+  doc["isRelayOn"] = isRelayOn; // Send Machine Status
   // event is empty, backend handles logic
 
   String json;

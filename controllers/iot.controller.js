@@ -121,14 +121,15 @@ const ingestData = async (req, res, next) => {
     */
 
     // --- MODE DELTA LOGGING (BACKEND GENERATED) ---
-    // This logic detects weight jumps and generates all intermediate logs
 
     // 1. Get Device Thresholds
-    const threshold = device.threshold || 10.0;
-    const relayThreshold = device.relayThreshold || 50.0;
+    let threshold = parseFloat(device.threshold);
+    if (!threshold || threshold < 0.1) threshold = 5.0; // Default safety
+
+    const relayThreshold = parseFloat(device.relayThreshold) || 50.0;
     const currentWeight = parseFloat(weight);
 
-    // 2. Get Last Log to determine "Base Weight"
+    // 2. Get Last Log
     const latestLog = await prisma.packingLog.findFirst({
       where: { deviceId: device.id },
       orderBy: { createdAt: 'desc' }
@@ -138,34 +139,60 @@ const ingestData = async (req, res, next) => {
 
     if (latestLog) {
       if (currentWeight >= latestLog.weight) {
-        lastLoggedWeight = latestLog.weight;
+        lastLoggedWeight = parseFloat(latestLog.weight);
       } else {
-        // Weight dropped (Reset happened). Base is 0.
+        // Reset: Weight dropped significantly below last log
         lastLoggedWeight = 0;
       }
     }
 
-    // 3. DELTA LOOP: Find all crossed thresholds
-    // Logic: If Last=0, Current=28, Th=10 -> Next Target=10.
-    // Loop 1: 28 >= 10? Yes. Log 10. Next Target=20.
-    // Loop 2: 28 >= 20? Yes. Log 20. Next Target=30.
-    // Loop 3: 28 >= 30? No. Stop.
+    // Debugging
+    console.log(`[IoT] Ingest: ${weight}kg. Last: ${lastLoggedWeight}kg. Th: ${threshold}kg.`);
+
+    // 3. DELTA LOOP
+    // ONLY RUN LOGGING IF REQ says Machine is ON
+    const isRelayOn = req.body.isRelayOn === true || req.body.isRelayOn === "true";
+
+    // Always calculate targets, but only push to logsToCreate if machine is active
+    // OR if we hit the RelayThreshold (which means we just finished a batch)
 
     let nextTarget = lastLoggedWeight + threshold;
     const logsToCreate = [];
 
-    while (currentWeight >= nextTarget && nextTarget < relayThreshold) {
-      logsToCreate.push({
-        weight: nextTarget,
-        deviceId: device.id,
-        petaniId: null,
-        createdAt: new Date()
-      });
+    // Safety: Prevent infinite loop if threshold is too small relative to gap
+    let safetyCounter = 0;
+    const MAX_LOOPS = 100;
+
+    // Use epsilon for float comparison logic
+    while (currentWeight >= (nextTarget - 0.01) && nextTarget < relayThreshold) {
+
+      // CRITICAL CHANGE: Only logs if Machine is ON
+      if (isRelayOn) {
+        logsToCreate.push({
+          weight: nextTarget,
+          deviceId: device.id,
+          petaniId: null,
+          createdAt: new Date()
+        });
+      }
+
       nextTarget += threshold;
+
+      safetyCounter++;
+      if (safetyCounter > MAX_LOOPS) break;
     }
 
-    // 4. STOP Logic (Max Threshold)
+    if (logsToCreate.length > 0) {
+      console.log(`[IoT] Generated ${logsToCreate.length} rows. (Machine ON)`);
+    } else {
+      if (!isRelayOn && currentWeight > threshold) {
+        console.log(`[IoT] Skipped logs because Machine is OFF. Weight: ${currentWeight}kg`);
+      }
+    }
+
+    // 4. STOP Logic
     if (currentWeight >= relayThreshold) {
+      // Log Max if not already close
       if (Math.abs(lastLoggedWeight - currentWeight) > 1.0) {
         logsToCreate.push({
           weight: currentWeight,
@@ -175,9 +202,8 @@ const ingestData = async (req, res, next) => {
       }
     }
 
-    // 5. Bulk Insert Logs
+    // 5. Bulk Insert
     if (logsToCreate.length > 0) {
-      console.log(`Generating ${logsToCreate.length} logs for device ${device.id}`);
       await prisma.packingLog.createMany({
         data: logsToCreate
       });
