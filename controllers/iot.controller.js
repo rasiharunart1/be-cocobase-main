@@ -113,46 +113,75 @@ const ingestData = async (req, res, next) => {
       });
     }
 
-    // === DELTA-BASED MILESTONE LOGGING ===
-    // Only create packingLog when crossing threshold milestones
-    // Save DELTA (weight change), not absolute weight
+    // === DELTA-BASED MILESTONE LOGGING (Multi-Session Support) ===
+    // Milestone: Track across ALL sessions
+    // Delta: Calculate within CURRENT session (proper deltas: 5.1kg, 5.2kg, 4.9kg...)
 
     if (isRelayOn && currentWeight > 0.05) {
       const threshold = parseFloat(device.threshold) || 5.0;
 
-      // Calculate cumulative weight (sum of all deltas from ALL sessions today)
+      // Get total cumulative (for milestone tracking across all sessions)
       const aggregate = await prisma.packingLog.aggregate({
         _sum: { weight: true },
         where: {
           deviceId: device.id,
-          petaniId: null  // Unassigned logs (all sessions today)
+          petaniId: null
         }
       });
-      const cumulativeWeight = aggregate._sum.weight || 0.0;
+      const totalCumulative = aggregate._sum.weight || 0.0;
+
+      // Detect session boundary (new session if gap > 5 minutes)
+      const recentLog = await prisma.packingLog.findFirst({
+        where: {
+          deviceId: device.id,
+          petaniId: null
+        },
+        orderBy: { createdAt: 'desc' }
+      });
+
+      const now = new Date();
+      const SESSION_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+      const isNewSession = !recentLog ||
+        (now - new Date(recentLog.createdAt)) > SESSION_TIMEOUT_MS;
+
+      // Get session cumulative (for delta calculation within current session)
+      let sessionCumulative = 0;
+      if (!isNewSession) {
+        const sessionLogs = await prisma.packingLog.findMany({
+          where: {
+            deviceId: device.id,
+            petaniId: null,
+            createdAt: {
+              gte: new Date(now - SESSION_TIMEOUT_MS)
+            }
+          }
+        });
+        sessionCumulative = sessionLogs.reduce((sum, log) => sum + parseFloat(log.weight), 0);
+      }
 
       // Calculate TOTAL weight (cumulative + current session weight)
       // This enables multi-session support!
-      const totalWeight = cumulativeWeight + currentWeight;
+      const totalWeight = totalCumulative + currentWeight;
 
       // Check if we've crossed a new threshold milestone
       // Compare TOTAL accumulated weight across all sessions
       const currentMilestone = Math.floor(totalWeight / threshold);
-      const lastMilestone = Math.floor(cumulativeWeight / threshold);
+      const lastMilestone = Math.floor(totalCumulative / threshold);
 
       if (currentMilestone > lastMilestone) {
-        // Save current weight as the delta
-        const delta = currentWeight;
+        // Calculate PROPER DELTA from current session
+        const delta = currentWeight - sessionCumulative;
 
         await prisma.packingLog.create({
           data: {
-            weight: delta,  // Current weight becomes the delta
+            weight: delta,  // Proper delta (5.1, 5.2, 4.9...)
             deviceId: device.id,
             petaniId: null,
             createdAt: new Date()
           }
         });
 
-        console.log(`📦 Milestone ${currentMilestone}: Delta = ${delta.toFixed(2)}kg (Session: ${currentWeight}kg, Total: ${totalWeight.toFixed(2)}kg)`);
+        console.log(`📦 Milestone ${currentMilestone}: Delta = ${delta.toFixed(2)}kg (Current: ${currentWeight}kg, SessionBase: ${sessionCumulative.toFixed(2)}kg, Total: ${totalWeight.toFixed(2)}kg${isNewSession ? ' [NEW SESSION]' : ''})`);
       }
     }
 
