@@ -207,10 +207,13 @@ const ingestData = async (req, res, next) => {
       // If currentWeight is 10.2, cumulative is 5.1 (from previous log). Delta is 5.1. Log it.
 
       const potentialDelta = currentWeight - sessionCumulative;
+      const relayThreshold = parseFloat(device.relayThreshold) || 50.0;
 
       // Ensure we don't log negative deltas (if weight fluctuates down slightly)
-      // and ensure we meet the threshold.
-      if (potentialDelta >= threshold) {
+      // and ensure we meet the threshold OR we hit the final Relay Limit (Force Last Log)
+      const isFinalLog = currentWeight >= relayThreshold;
+
+      if (potentialDelta >= threshold || (isFinalLog && potentialDelta > 0.1)) {
         await prisma.packingLog.create({
           data: {
             weight: potentialDelta,
@@ -220,7 +223,7 @@ const ingestData = async (req, res, next) => {
           }
         });
 
-        console.log(`📦 Log Created: ${potentialDelta.toFixed(2)}kg (Scale: ${currentWeight}kg | SessionBase: ${sessionCumulative.toFixed(2)}kg)`);
+        console.log(`📦 Log Created: ${potentialDelta.toFixed(2)}kg (Scale: ${currentWeight}kg | SessionBase: ${sessionCumulative.toFixed(2)}kg)${isFinalLog ? ' [FINAL]' : ''}`);
       }
     }
 
