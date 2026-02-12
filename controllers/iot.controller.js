@@ -140,86 +140,73 @@ const ingestData = async (req, res, next) => {
     const RESET_THRESHOLD = 0.5;
 
     // Reset device to ready state when weight drops
+    // This runs ONCE when the load is removed (transition from Not Ready -> Ready)
     if (currentWeight <= RESET_THRESHOLD && !device.isReady) {
       await prisma.device.update({
         where: { id: device.id },
         data: { isReady: true }
       });
+
+      // Mark the start of a new session
+      await prisma.packingLog.create({
+        data: {
+          weight: 0,
+          deviceId: device.id,
+          notes: 'SESSION_START',
+          createdAt: new Date()
+        }
+      });
+      console.log("♻️  Session Reset: Ready for new batch");
     }
 
-    // === REAL-TIME DELTA LOGGING (Corrected) ===
-    // Log whenever weight increases by 'threshold' amount from the last logged state
+    // === REAL-TIME DELTA LOGGING ===
 
     if (isRelayOn && currentWeight > 0.05) {
       const threshold = parseFloat(device.threshold) || 5.0;
 
-      // 1. Detect Session (New or Existing)
-      const recentLog = await prisma.packingLog.findFirst({
+      // 1. Find the start of the CURRENT session
+      // We look for the last 'SESSION_START' marker. 
+      // If none found (e.g. system just claimed), we fallback to time-based.
+      const lastSessionStart = await prisma.packingLog.findFirst({
         where: {
           deviceId: device.id,
-          petaniId: null
+          notes: 'SESSION_START'
         },
         orderBy: { createdAt: 'desc' }
       });
 
-      const now = new Date();
-      const SESSION_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes break = new session
-      const isNewSession = !recentLog ||
-        (now - new Date(recentLog.createdAt)) > SESSION_TIMEOUT_MS;
-
-      // 2. Calculate "Base Weight" (Sum of all previous logs in THIS session)
+      // 2. Calculate "Base Weight" (Sum of all logs SINCE the last session start)
       let sessionCumulative = 0.0;
+      let searchDateFilter = {};
 
-      if (!isNewSession) {
-        // Get all logs for the current active session to calculate "recorded so far"
-        // We look back enough time or fetch by session ID if we had one. 
-        // For now, relying on time-based clustering.
-        const sessionLogs = await prisma.packingLog.findMany({
-          where: {
-            deviceId: device.id,
-            petaniId: null,
-            createdAt: {
-              // Look back a reasonable amount of time for the current session
-              // or getting the gap-based session. 
-              // Simpler approach: If not new session, sum all recent contiguous logs.
-              gte: new Date(now - (12 * 60 * 60 * 1000)) // Max 12h session lookback safety
-            }
-          },
-          orderBy: { createdAt: 'desc' }
-        });
-
-        // Filter functionally to find the continuous session block
-        let activeSessionLogs = [];
-        for (let i = 0; i < sessionLogs.length; i++) {
-          const logTime = new Date(sessionLogs[i].createdAt);
-          const prevLogTime = i < sessionLogs.length - 1 ? new Date(sessionLogs[i + 1].createdAt) : null;
-
-          activeSessionLogs.push(sessionLogs[i]);
-
-          // If gap to previous log is too big, stop (that was the start of session)
-          if (prevLogTime && (logTime - prevLogTime) > SESSION_TIMEOUT_MS) {
-            break;
-          }
-        }
-
-        sessionCumulative = activeSessionLogs.reduce((sum, log) => sum + parseFloat(log.weight), 0);
+      if (lastSessionStart) {
+        searchDateFilter = { gte: lastSessionStart.createdAt };
+      } else {
+        // Fallback: Last 12 hours if no explicit start marker found
+        searchDateFilter = { gte: new Date(new Date() - 12 * 60 * 60 * 1000) };
       }
 
-      // 3. Calculate Delta (Current Sensor Weight - What we have already logged)
-      // Example: 
-      // Logged so far: 5.0, 5.0 (Total 10.0)
-      // Current Scale: 15.3
-      // Delta: 15.3 - 10.0 = 5.3 -> Valid logic? 
-      // Wait, your requirement: "Real-time" increments.
-      // If threshold is 5kg.
-      // 0 -> 5.1 (Log 5.1). Cumulative now 5.1.
-      // 5.1 -> 10.3 (Delta = 10.3 - 5.1 = 5.2). Log 5.2. Cumulative now 10.3.
-      // 10.3 -> 12.0 (Delta = 1.7). No log.
+      const sessionLogs = await prisma.packingLog.findMany({
+        where: {
+          deviceId: device.id,
+          petaniId: null,
+          createdAt: searchDateFilter,
+          notes: null // Exclude the marker itself (weight 0 anyway) or other metadata
+        }
+      });
+
+      sessionCumulative = sessionLogs.reduce((sum, log) => sum + parseFloat(log.weight), 0);
+
+      // 3. Calculate Delta
+      // If we just reset, sessionCumulative is 0. 
+      // If currentWeight is 5.1, delta is 5.1. Log it.
+      // If currentWeight is 10.2, cumulative is 5.1 (from previous log). Delta is 5.1. Log it.
 
       const potentialDelta = currentWeight - sessionCumulative;
 
+      // Ensure we don't log negative deltas (if weight fluctuates down slightly)
+      // and ensure we meet the threshold.
       if (potentialDelta >= threshold) {
-        // Create the log with the EXACT delta (e.g. 5.1, 5.2, 6.3)
         await prisma.packingLog.create({
           data: {
             weight: potentialDelta,
