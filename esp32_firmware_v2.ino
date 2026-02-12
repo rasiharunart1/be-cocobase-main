@@ -21,8 +21,7 @@ const char *API_URL =
 #define PIN_BTN_RELAY 5
 
 #define LCD_INTERVAL 150
-#define HTTP_HIPRIO 500  // Fast update when changing
-#define HTTP_LOPRIO 3000 // Slow update when idle
+#define HTTP_INTERVAL 500 // Constant update interval (0.5s)
 
 // ================= OBJECT =================
 
@@ -261,11 +260,7 @@ void loop() {
 
   // 5. Intelligent Stream
   if (!offlineMode) {
-    bool significantChange =
-        abs(currentWeight - lastSentWeight) > 0.3; // 300 gram change
-    long interval = significantChange ? HTTP_HIPRIO : HTTP_LOPRIO;
-
-    if (millis() - lastHTTP >= interval) {
+    if (millis() - lastHTTP >= HTTP_INTERVAL) {
       sendData(kg, isRelayOn);
       lastHTTP = millis();
     }

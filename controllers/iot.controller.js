@@ -33,9 +33,10 @@ const getPackingLogs = async (req, res, next) => {
     const { deviceId } = req.params;
     const logs = await prisma.packingLog.findMany({
       where: { deviceId: parseInt(deviceId) },
-      orderBy: {
-        createdAt: 'desc',
-      },
+      orderBy: [
+        { createdAt: 'desc' },
+        { id: 'desc' }
+      ],
       take: 50,
       include: {
         petani: true
@@ -77,201 +78,82 @@ const ingestData = async (req, res, next) => {
     const { token, weight } = req.body;
 
     if (!token || weight === undefined) {
-      return res.status(400).json({ success: false, message: "Token and weight are required" });
+      return res.status(400).json({
+        success: false,
+        message: "Token and weight are required"
+      });
     }
 
     const device = await prisma.device.findUnique({ where: { token } });
     if (!device) {
-      return res.status(404).json({ success: false, message: "Device not found" });
+      return res.status(404).json({
+        success: false,
+        message: "Device not found"
+      });
     }
 
-    // Save reading
+    const currentWeight = parseFloat(weight);
+
+    // Always save raw reading for history
     await prisma.loadcellReading.create({
-      data: { weight: parseFloat(weight), deviceId: device.id }
+      data: {
+        weight: currentWeight,
+        deviceId: device.id
+      }
     });
 
     const RESET_THRESHOLD = 0.5;
+    const isRelayOn = req.body.isRelayOn === true || req.body.isRelayOn === "true";
 
-    // Logic for resetting isReady
-    if (weight <= RESET_THRESHOLD && !device.isReady) {
+    // Reset device to ready state when weight drops
+    if (currentWeight <= RESET_THRESHOLD && !device.isReady) {
       await prisma.device.update({
         where: { id: device.id },
         data: { isReady: true }
       });
-      return res.status(200).json({ success: true, message: "Device reset to ready" });
     }
 
-    /*
-    // --- OLD LOGIC (EVENT BASED) ---
-    // Only log when ESP32 explicitly sends "LOG" event
-    const { event } = req.body;
-
-    if (event === "LOG" && device.isReady) {
-      // Create packing log automatically
+    // === REAL-TIME LOGGING ===
+    // Create one log per request when relay is active
+    // ESP32 handles hysteresis filtering, so we log every transmission
+    if (isRelayOn && currentWeight > 0.05) {
       await prisma.packingLog.create({
         data: {
-          weight: parseFloat(weight),
+          weight: currentWeight,
           deviceId: device.id,
-          petaniId: null // Admin will assign farmer later via dropdown
+          petaniId: null,
+          createdAt: new Date()  // Real timestamp
         }
       });
 
-      console.log(`Log created for device ${device.id} at weight ${weight}`);
+      console.log(`📦 Real-time log: ${currentWeight}kg for device ${device.id}`);
     }
-    */
 
-    // --- MODE DELTA LOGGING (BACKEND GENERATED) ---
-
-    // 1. Get Device Thresholds
-    let threshold = parseFloat(device.threshold);
-    if (!threshold || threshold < 0.1) threshold = 5.0; // Default safety
-
+    // Check if max threshold reached
     const relayThreshold = parseFloat(device.relayThreshold) || 50.0;
-    const currentWeight = parseFloat(weight);
-
-    // 2. Get Last Log
-    const latestLog = await prisma.packingLog.findFirst({
-      where: { deviceId: device.id },
-      orderBy: { createdAt: 'desc' }
-    });
-
-    let lastLoggedWeight = 0;
-
-    if (latestLog) {
-      if (currentWeight >= latestLog.weight) {
-        lastLoggedWeight = parseFloat(latestLog.weight);
-      } else {
-        // Reset: Weight dropped significantly below last log
-        lastLoggedWeight = 0;
-      }
-    }
-
-    // Debugging
-    console.log(`[IoT] Ingest: ${weight}kg. Last: ${lastLoggedWeight}kg. Th: ${threshold}kg.`);
-
-    // 3. STRICT THRESHOLD LOGIC
-    // Requirement: "Buat murni saja... setiap penambahan beban sesuai threshold web, maka buat lognya"
-    // Logic: Only log if we have enough delta to fill a full THRESHOLD block.
-    // Example: Th=5kg. Current=12kg. Logs: 5kg, 5kg. (Total 10kg). Remainder 2kg ignored until it reaches 5kg.
-
-    // ONLY RUN LOGGING IF REQ says Machine is ON
-    const isRelayOn = req.body.isRelayOn === true || req.body.isRelayOn === "true";
-
-    // Calculate Current Batch Total (Sum of unassigned logs)
-    const aggregate = await prisma.packingLog.aggregate({
-      _sum: {
-        weight: true
-      },
-      where: {
-        deviceId: device.id,
-        petaniId: null // Only count current active batch (unassigned)
-      }
-    });
-
-    const currentBatchTotal = aggregate._sum.weight || 0.0;
-
-    console.log(`[IoT] Weight: ${currentWeight}kg. BatchTotal: ${currentBatchTotal}kg. Th: ${threshold}kg.`);
-
-    const logsToCreate = [];
-
-    if (isRelayOn || currentWeight >= relayThreshold) {
-      let delta = currentWeight - currentBatchTotal;
-
-      // STRICT LOOP: Only create logs if Delta >= Threshold
-      // We do NOT log small steps (0.1kg). We wait for the full bucket (5kg).
-
-      let createdCount = 0;
-      const MAX_CHUNKS = 50;
-
-      while (delta >= threshold && createdCount < MAX_CHUNKS) {
-        logsToCreate.push({
-          weight: threshold, // ALWAYS log exact threshold amount
-          deviceId: device.id,
-          petaniId: null,
-          createdAt: new Date()
-        });
-        delta -= threshold;
-        createdCount++;
-      }
-
-      // STOP LOGIC (Max Threshold)
-      // If we reached the RelayLimit, we MUST log the remainder to close the batch tally
-      // even if it's less than threshold.
-      if (currentWeight >= relayThreshold && delta > 0.1) {
-        logsToCreate.push({
-          weight: delta,
-          deviceId: device.id,
-          petaniId: null,
-          createdAt: new Date()
-        });
-        console.log(`[IoT] Final Remainder Log: ${delta.toFixed(2)}kg`);
-      }
-
-      if (logsToCreate.length > 0) {
-        console.log(`[IoT] Generated ${logsToCreate.length} strict chunks.`);
-      }
-    }
-
-    // 5. Bulk Insert
-    if (logsToCreate.length > 0) {
-      await prisma.packingLog.createMany({
-        data: logsToCreate
-      });
-
-      if (currentWeight >= relayThreshold) {
-        await prisma.device.update({
-          where: { id: device.id },
-          data: { isReady: false }
-        });
-      }
-    } else {
-      if (currentWeight <= 0.5 && !device.isReady) {
-        await prisma.device.update({
-          where: { id: device.id },
-          data: { isReady: true }
-        });
-      }
-    }
-
-    /* 
-    // OLD LOGIC (COMMENTED OUT): 
-    // Automatic packing log creation when threshold is reached
-    // threshold: Auto-log threshold - creates log automatically when weight >= this value
-    // relayThreshold: Relay control threshold - ESP32 uses this to stop relay/motor
-    
-    if (weight >= device.threshold && device.isReady) {
-      // Create packing log automatically
-      await prisma.packingLog.create({
-        data: {
-          weight: parseFloat(weight),
-          deviceId: device.id,
-          petaniId: null // Admin will assign farmer later via dropdown
-        }
-      });
-
-      // Mark device as not ready to prevent duplicate logs
+    if (currentWeight >= relayThreshold && isRelayOn) {
       await prisma.device.update({
         where: { id: device.id },
         data: { isReady: false }
       });
+      console.log(`🛑 Max threshold reached: ${currentWeight}kg`);
     }
-    */
 
-    // Check for pending command and return thresholds to ESP32
+    // Return thresholds and any pending commands to ESP32
     let responsePayload = {
       success: true,
       message: "Reading recorded",
-      threshold: device.threshold || 10.0,        // Auto-log threshold
-      relayThreshold: device.relayThreshold || 10.0  // Relay stop threshold
+      threshold: device.threshold || 10.0,        // Display only (for LCD)
+      relayThreshold: device.relayThreshold || 50.0
     };
 
+    // Handle pending commands (calibration, tare, etc.)
     if (device.pendingCommand) {
       try {
         const command = JSON.parse(device.pendingCommand);
         responsePayload.command = command;
         responsePayload.message = "Command sent to device";
 
-        // Clear pending command after sending
         await prisma.device.update({
           where: { id: device.id },
           data: { pendingCommand: null }
