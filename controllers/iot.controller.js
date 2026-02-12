@@ -1,30 +1,63 @@
 const prisma = require('../libs/prisma');
 
-const saveLoadcellReading = async (req, res, next) => {
-  try {
-    const { weight } = req.body;
+// const saveLoadcellReading = async (req, res, next) => {
+//   try {
+//     const { weight } = req.body;
 
-    if (weight === undefined || weight === null) {
+//     if (weight === undefined || weight === null) {
+//       return res.status(400).json({
+//         success: false,
+//         message: 'Weight is required',
+//         data: null,
+//       });
+//     }
+
+//     const reading = await prisma.loadcellReading.create({
+//       data: {
+//         weight: parseFloat(weight),
+//       },
+//     });
+
+//     res.status(201).json({
+//       success: true,
+//       message: 'Reading saved successfully',
+//       data: reading,
+//     });
+//   } catch (err) {
+//     next(err);
+//   }
+// };
+
+
+const saveLoadcellReading = async (req, res) => {
+  try {
+    const { weight, isRelayOn } = req.body;
+
+    if (weight === undefined) {
       return res.status(400).json({
         success: false,
-        message: 'Weight is required',
-        data: null,
+        message: 'Weight required'
       });
     }
 
-    const reading = await prisma.loadcellReading.create({
+    const w = Number(weight);
+
+    // filtering noise & spike liar
+    if (w < -2 || w > 300) return res.json({ success: true });
+
+    await prisma.loadcellReading.create({
       data: {
-        weight: parseFloat(weight),
-      },
+        weight: w,
+        relay: isRelayOn ?? false,
+        status: 'Sukses'
+      }
     });
 
-    res.status(201).json({
-      success: true,
-      message: 'Reading saved successfully',
-      data: reading,
-    });
+    res.json({ success: true });
+
   } catch (err) {
-    next(err);
+    console.error(err);
+    res.status(500).json({ success: false });
   }
 };
 
