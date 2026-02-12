@@ -149,47 +149,59 @@ const ingestData = async (req, res, next) => {
     // Debugging
     console.log(`[IoT] Ingest: ${weight}kg. Last: ${lastLoggedWeight}kg. Th: ${threshold}kg.`);
 
-    // 3. HIGH FREQUENCY LOGGING LOGIC
-    // Requirement: "Threshold 5kg : 5.01kg. 5.10kg. 5.6kg dst"
-    // Logic: Once currentWeight >= Threshold, log every SMALL change (e.g. 0.1kg).
+    // 3. DELTA SUMMATION LOGIC
+    // Requirement: "Total Akumulasi Log harus sama dengan Berat Akhir (30kg)"
+    // Solution: We log the DELTA (Difference).
+    // Logic: CurrentBatchTotal = Sum(Unassigned Logs).
+    //        If CurrentWeight > CurrentBatchTotal + Step -> Log(CurrentWeight - CurrentBatchTotal).
 
     // ONLY RUN LOGGING IF REQ says Machine is ON
     const isRelayOn = req.body.isRelayOn === true || req.body.isRelayOn === "true";
 
-    const logsToCreate = [];
+    // Calculate Current Batch Total (Sum of unassigned logs)
+    const aggregate = await prisma.packingLog.aggregate({
+      _sum: {
+        weight: true
+      },
+      where: {
+        deviceId: device.id,
+        petaniId: null // Only count current active batch (unassigned)
+      }
+    });
 
-    // Define Small Step for "Realtime" feel (e.g. 0.1kg)
+    const currentBatchTotal = aggregate._sum.weight || 0.0;
     const RECORD_STEP = 0.1;
 
-    // Condition 1: Must be above the Start Threshold (e.g. 5kg)
-    // Condition 2: Must have increased by at least RECORD_STEP from last log
-    // Condition 3: Must be below Relay/Max Threshold
+    console.log(`[IoT] Weight: ${currentWeight}kg. BatchTotal: ${currentBatchTotal}kg. Relay: ${isRelayOn}`);
 
-    if (currentWeight >= threshold && currentWeight >= (lastLoggedWeight + RECORD_STEP) && currentWeight < relayThreshold) {
+    const logsToCreate = [];
+
+    // Check if we have increased enough from the TOTAL
+    if (currentWeight >= threshold && currentWeight >= (currentBatchTotal + RECORD_STEP) && currentWeight < relayThreshold) {
 
       if (isRelayOn) {
-        logsToCreate.push({
-          weight: currentWeight, // Log the ACTUAL current weight
-          deviceId: device.id,
-          petaniId: null,
-          createdAt: new Date()
-        });
-        console.log(`[IoT] Realtime Log: ${currentWeight}kg (Base Th: ${threshold}, Step: ${RECORD_STEP})`);
+        const delta = currentWeight - currentBatchTotal;
+
+        // Sanity check: Delta must be positive
+        if (delta > 0) {
+          logsToCreate.push({
+            weight: delta, // Log the DIFFERENCE
+            deviceId: device.id,
+            petaniId: null,
+            createdAt: new Date()
+          });
+          console.log(`[IoT] Delta Log: ${delta.toFixed(2)}kg (Total: ${(currentBatchTotal + delta).toFixed(2)}kg)`);
+        }
       }
     }
 
-    if (logsToCreate.length === 0) {
-      if (!isRelayOn && currentWeight > threshold && currentWeight >= (lastLoggedWeight + RECORD_STEP)) {
-        console.log(`[IoT] Skipped log because Machine is OFF. Weight: ${currentWeight}kg`);
-      }
-    }
-
-    // 4. STOP Logic
-    if (currentWeight >= relayThreshold) {
-      // Log Max if not already close
-      if (Math.abs(lastLoggedWeight - currentWeight) > 1.0) {
+    // 4. STOP Logic (Final Delta)
+    if (currentWeight >= relayThreshold && isRelayOn) {
+      // If there is significant remaining unlogged weight, log it
+      const remaining = currentWeight - currentBatchTotal;
+      if (remaining > 0.5) {
         logsToCreate.push({
-          weight: currentWeight,
+          weight: remaining,
           deviceId: device.id,
           petaniId: null
         });
