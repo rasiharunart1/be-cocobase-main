@@ -182,11 +182,11 @@ const ingestData = async (req, res, next) => {
       if (isRelayOn) {
         let delta = currentWeight - currentBatchTotal;
 
-        // Loop to break down large deltas into consistent steps
-        // Example: Delta 6kg. Step 0.5kg. -> Log 0.5kg 12 times.
-        // This ensures the logs look "consistent" in the table.
+        // Loop to break down large deltas into consistent steps (based on THRESHOLD)
+        // Example: Threshold 5kg. Delta 12kg. -> Log 5kg, 5kg, 2kg.
+        // This ensures the logs align with the user-defined batch size.
 
-        const CHUNK_SIZE = 0.5; // Fixed size for consistency
+        const CHUNK_SIZE = threshold;
         let createdCount = 0;
         const MAX_CHUNKS = 50; // Safety limit
 
