@@ -139,7 +139,7 @@ void processServerCommand(JsonDocument &rDoc) {
 
 // ================= HTTP =================
 
-void sendData(float weight) {
+void sendData(float weight, bool relayState) {
   if (WiFi.status() != WL_CONNECTED)
     return;
 
@@ -153,7 +153,7 @@ void sendData(float weight) {
   JsonDocument doc;
   doc["token"] = DEVICE_TOKEN;
   doc["weight"] = weight;
-  doc["isRelayOn"] = isRelayOn; // Send Machine Status
+  doc["isRelayOn"] = relayState; // Send Passed Status
   // event is empty, backend handles logic
 
   String json;
@@ -256,7 +256,7 @@ void loop() {
     setRelay(false);
     buzzerBeep(3);
     if (!offlineMode)
-      sendData(kg); // Force final send
+      sendData(kg, true); // Force ON status so backend accepts final log
   }
 
   // 5. Intelligent Stream
@@ -266,7 +266,7 @@ void loop() {
     long interval = significantChange ? HTTP_HIPRIO : HTTP_LOPRIO;
 
     if (millis() - lastHTTP >= interval) {
-      sendData(kg);
+      sendData(kg, isRelayOn);
       lastHTTP = millis();
     }
   }

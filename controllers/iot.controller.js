@@ -174,7 +174,7 @@ const ingestData = async (req, res, next) => {
 
     const logsToCreate = [];
 
-    if (isRelayOn) {
+    if (isRelayOn || currentWeight >= relayThreshold) {
       let delta = currentWeight - currentBatchTotal;
 
       // STRICT LOOP: Only create logs if Delta >= Threshold
