@@ -149,11 +149,10 @@ const ingestData = async (req, res, next) => {
     // Debugging
     console.log(`[IoT] Ingest: ${weight}kg. Last: ${lastLoggedWeight}kg. Th: ${threshold}kg.`);
 
-    // 3. DELTA SUMMATION LOGIC
-    // Requirement: "Total Akumulasi Log harus sama dengan Berat Akhir (30kg)"
-    // Solution: We log the DELTA (Difference).
-    // Logic: CurrentBatchTotal = Sum(Unassigned Logs).
-    //        If CurrentWeight > CurrentBatchTotal + Step -> Log(CurrentWeight - CurrentBatchTotal).
+    // 3. STRICT THRESHOLD LOGIC
+    // Requirement: "Buat murni saja... setiap penambahan beban sesuai threshold web, maka buat lognya"
+    // Logic: Only log if we have enough delta to fill a full THRESHOLD block.
+    // Example: Th=5kg. Current=12kg. Logs: 5kg, 5kg. (Total 10kg). Remainder 2kg ignored until it reaches 5kg.
 
     // ONLY RUN LOGGING IF REQ says Machine is ON
     const isRelayOn = req.body.isRelayOn === true || req.body.isRelayOn === "true";
@@ -170,61 +169,46 @@ const ingestData = async (req, res, next) => {
     });
 
     const currentBatchTotal = aggregate._sum.weight || 0.0;
-    const RECORD_STEP = 0.1;
 
-    console.log(`[IoT] Weight: ${currentWeight}kg. BatchTotal: ${currentBatchTotal}kg. Relay: ${isRelayOn}`);
+    console.log(`[IoT] Weight: ${currentWeight}kg. BatchTotal: ${currentBatchTotal}kg. Th: ${threshold}kg.`);
 
     const logsToCreate = [];
 
-    // Check if we have increased enough from the TOTAL
-    if (currentWeight >= threshold && currentWeight >= (currentBatchTotal + RECORD_STEP) && currentWeight < relayThreshold) {
+    if (isRelayOn) {
+      let delta = currentWeight - currentBatchTotal;
 
-      if (isRelayOn) {
-        let delta = currentWeight - currentBatchTotal;
+      // STRICT LOOP: Only create logs if Delta >= Threshold
+      // We do NOT log small steps (0.1kg). We wait for the full bucket (5kg).
 
-        // Loop to break down large deltas into consistent steps (based on THRESHOLD)
-        // Example: Threshold 5kg. Delta 12kg. -> Log 5kg, 5kg, 2kg.
-        // This ensures the logs align with the user-defined batch size.
+      let createdCount = 0;
+      const MAX_CHUNKS = 50;
 
-        const CHUNK_SIZE = threshold;
-        let createdCount = 0;
-        const MAX_CHUNKS = 50; // Safety limit
-
-        while (delta >= CHUNK_SIZE && createdCount < MAX_CHUNKS) {
-          logsToCreate.push({
-            weight: CHUNK_SIZE,
-            deviceId: device.id,
-            petaniId: null,
-            createdAt: new Date()
-          });
-          delta -= CHUNK_SIZE;
-          createdCount++;
-        }
-
-        // Log remaining remainder (e.g. 0.23kg)
-        if (delta > 0.05) { // Ignore micro differences
-          logsToCreate.push({
-            weight: delta,
-            deviceId: device.id,
-            petaniId: null,
-            createdAt: new Date()
-          });
-        }
-
-        console.log(`[IoT] Generated ${logsToCreate.length} chunks for ${currentWeight}kg`);
-      }
-    }
-
-    // 4. STOP Logic (Final Delta)
-    if (currentWeight >= relayThreshold && isRelayOn) {
-      // If there is significant remaining unlogged weight, log it
-      const remaining = currentWeight - currentBatchTotal;
-      if (remaining > 0.5) {
+      while (delta >= threshold && createdCount < MAX_CHUNKS) {
         logsToCreate.push({
-          weight: remaining,
+          weight: threshold, // ALWAYS log exact threshold amount
           deviceId: device.id,
-          petaniId: null
+          petaniId: null,
+          createdAt: new Date()
         });
+        delta -= threshold;
+        createdCount++;
+      }
+
+      // STOP LOGIC (Max Threshold)
+      // If we reached the RelayLimit, we MUST log the remainder to close the batch tally
+      // even if it's less than threshold.
+      if (currentWeight >= relayThreshold && delta > 0.1) {
+        logsToCreate.push({
+          weight: delta,
+          deviceId: device.id,
+          petaniId: null,
+          createdAt: new Date()
+        });
+        console.log(`[IoT] Final Remainder Log: ${delta.toFixed(2)}kg`);
+      }
+
+      if (logsToCreate.length > 0) {
+        console.log(`[IoT] Generated ${logsToCreate.length} strict chunks.`);
       }
     }
 
