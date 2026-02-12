@@ -189,6 +189,7 @@ model LoadcellReading {
   id        Int      @id @default(autoincrement())
   deviceId  Int
   weight    Float
+  isRelayOn Boolean  @default(false)
   device    Device   @relation(fields: [deviceId], references: [id])
   createdAt DateTime @default(now())
 }
@@ -198,6 +199,7 @@ model PackingLog {
   deviceId  Int
   petaniId  Int?     // nullable for backward compatibility with old logs
   weight    Float
+  notes     String?  // for session markers and other metadata
   device    Device   @relation(fields: [deviceId], references: [id])
   petani    Petani?  @relation(fields: [petaniId], references: [id])
   createdAt DateTime @default(now())
