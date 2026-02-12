@@ -180,18 +180,38 @@ const ingestData = async (req, res, next) => {
     if (currentWeight >= threshold && currentWeight >= (currentBatchTotal + RECORD_STEP) && currentWeight < relayThreshold) {
 
       if (isRelayOn) {
-        const delta = currentWeight - currentBatchTotal;
+        let delta = currentWeight - currentBatchTotal;
 
-        // Sanity check: Delta must be positive
-        if (delta > 0) {
+        // Loop to break down large deltas into consistent steps
+        // Example: Delta 6kg. Step 0.5kg. -> Log 0.5kg 12 times.
+        // This ensures the logs look "consistent" in the table.
+
+        const CHUNK_SIZE = 0.5; // Fixed size for consistency
+        let createdCount = 0;
+        const MAX_CHUNKS = 50; // Safety limit
+
+        while (delta >= CHUNK_SIZE && createdCount < MAX_CHUNKS) {
           logsToCreate.push({
-            weight: delta, // Log the DIFFERENCE
+            weight: CHUNK_SIZE,
             deviceId: device.id,
             petaniId: null,
             createdAt: new Date()
           });
-          console.log(`[IoT] Delta Log: ${delta.toFixed(2)}kg (Total: ${(currentBatchTotal + delta).toFixed(2)}kg)`);
+          delta -= CHUNK_SIZE;
+          createdCount++;
         }
+
+        // Log remaining remainder (e.g. 0.23kg)
+        if (delta > 0.05) { // Ignore micro differences
+          logsToCreate.push({
+            weight: delta,
+            deviceId: device.id,
+            petaniId: null,
+            createdAt: new Date()
+          });
+        }
+
+        console.log(`[IoT] Generated ${logsToCreate.length} chunks for ${currentWeight}kg`);
       }
     }
 
