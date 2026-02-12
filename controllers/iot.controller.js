@@ -161,12 +161,12 @@ const ingestData = async (req, res, next) => {
 
       // Calculate TOTAL weight (cumulative + current session weight)
       // This enables multi-session support!
-      const totalWeight = totalCumulative + currentWeight;
+      const totalWeight = cumulativeWeight + currentWeight;
 
       // Check if we've crossed a new threshold milestone
       // Compare TOTAL accumulated weight across all sessions
       const currentMilestone = Math.floor(totalWeight / threshold);
-      const lastMilestone = Math.floor(totalCumulative / threshold);
+      const lastMilestone = Math.floor(cumulativeWeight / threshold);
 
       if (currentMilestone > lastMilestone) {
         // Calculate PROPER DELTA from current session
