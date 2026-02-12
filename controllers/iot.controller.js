@@ -120,46 +120,39 @@ const ingestData = async (req, res, next) => {
     if (isRelayOn && currentWeight > 0.05) {
       const threshold = parseFloat(device.threshold) || 5.0;
 
-      // Get last packing log for this device
-      const lastLog = await prisma.packingLog.findFirst({
-        where: {
-          deviceId: device.id,
-          petaniId: null  // Only count current session (unassigned logs)
-        },
-        orderBy: { createdAt: 'desc' }
-      });
-
-      // Calculate current milestone and last milestone
-      const lastWeight = lastLog ? parseFloat(lastLog.weight) : 0;
-
-      // Calculate cumulative weight (sum of all deltas in current session)
+      // Calculate cumulative weight (sum of all deltas from ALL sessions today)
       const aggregate = await prisma.packingLog.aggregate({
         _sum: { weight: true },
         where: {
           deviceId: device.id,
-          petaniId: null
+          petaniId: null  // Unassigned logs (all sessions today)
         }
       });
       const cumulativeWeight = aggregate._sum.weight || 0.0;
 
+      // Calculate TOTAL weight (cumulative + current session weight)
+      // This enables multi-session support!
+      const totalWeight = cumulativeWeight + currentWeight;
+
       // Check if we've crossed a new threshold milestone
-      const currentMilestone = Math.floor(currentWeight / threshold);
+      // Compare TOTAL accumulated weight across all sessions
+      const currentMilestone = Math.floor(totalWeight / threshold);
       const lastMilestone = Math.floor(cumulativeWeight / threshold);
 
       if (currentMilestone > lastMilestone) {
-        // Calculate DELTA (weight change since last log)
-        const delta = currentWeight - cumulativeWeight;
+        // Save current weight as the delta
+        const delta = currentWeight;
 
         await prisma.packingLog.create({
           data: {
-            weight: delta,  // Save DELTA, not absolute weight!
+            weight: delta,  // Current weight becomes the delta
             deviceId: device.id,
             petaniId: null,
             createdAt: new Date()
           }
         });
 
-        console.log(`📦 Milestone ${currentMilestone}: Delta = ${delta.toFixed(2)}kg (Current: ${currentWeight}kg, Cumulative: ${(cumulativeWeight + delta).toFixed(2)}kg)`);
+        console.log(`📦 Milestone ${currentMilestone}: Delta = ${delta.toFixed(2)}kg (Session: ${currentWeight}kg, Total: ${totalWeight.toFixed(2)}kg)`);
       }
     }
 
