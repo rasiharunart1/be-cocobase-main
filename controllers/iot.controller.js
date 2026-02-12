@@ -94,7 +94,7 @@ const ingestData = async (req, res, next) => {
 
     const currentWeight = parseFloat(weight);
 
-    // Always save raw reading for history
+    // ALWAYS save to loadcellReading for real-time monitoring
     await prisma.loadcellReading.create({
       data: {
         weight: currentWeight,
@@ -113,20 +113,54 @@ const ingestData = async (req, res, next) => {
       });
     }
 
-    // === REAL-TIME LOGGING ===
-    // Create one log per request when relay is active
-    // ESP32 handles hysteresis filtering, so we log every transmission
+    // === DELTA-BASED MILESTONE LOGGING ===
+    // Only create packingLog when crossing threshold milestones
+    // Save DELTA (weight change), not absolute weight
+
     if (isRelayOn && currentWeight > 0.05) {
-      await prisma.packingLog.create({
-        data: {
-          weight: currentWeight,
+      const threshold = parseFloat(device.threshold) || 5.0;
+
+      // Get last packing log for this device
+      const lastLog = await prisma.packingLog.findFirst({
+        where: {
           deviceId: device.id,
-          petaniId: null,
-          createdAt: new Date()  // Real timestamp
-        }
+          petaniId: null  // Only count current session (unassigned logs)
+        },
+        orderBy: { createdAt: 'desc' }
       });
 
-      console.log(`📦 Real-time log: ${currentWeight}kg for device ${device.id}`);
+      // Calculate current milestone and last milestone
+      const lastWeight = lastLog ? parseFloat(lastLog.weight) : 0;
+
+      // Calculate cumulative weight (sum of all deltas in current session)
+      const aggregate = await prisma.packingLog.aggregate({
+        _sum: { weight: true },
+        where: {
+          deviceId: device.id,
+          petaniId: null
+        }
+      });
+      const cumulativeWeight = aggregate._sum.weight || 0.0;
+
+      // Check if we've crossed a new threshold milestone
+      const currentMilestone = Math.floor(currentWeight / threshold);
+      const lastMilestone = Math.floor(cumulativeWeight / threshold);
+
+      if (currentMilestone > lastMilestone) {
+        // Calculate DELTA (weight change since last log)
+        const delta = currentWeight - cumulativeWeight;
+
+        await prisma.packingLog.create({
+          data: {
+            weight: delta,  // Save DELTA, not absolute weight!
+            deviceId: device.id,
+            petaniId: null,
+            createdAt: new Date()
+          }
+        });
+
+        console.log(`📦 Milestone ${currentMilestone}: Delta = ${delta.toFixed(2)}kg (Current: ${currentWeight}kg, Cumulative: ${(cumulativeWeight + delta).toFixed(2)}kg)`);
+      }
     }
 
     // Check if max threshold reached
@@ -143,7 +177,7 @@ const ingestData = async (req, res, next) => {
     let responsePayload = {
       success: true,
       message: "Reading recorded",
-      threshold: device.threshold || 10.0,        // Display only (for LCD)
+      threshold: device.threshold || 10.0,
       relayThreshold: device.relayThreshold || 50.0
     };
 

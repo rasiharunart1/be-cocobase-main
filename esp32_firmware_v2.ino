@@ -21,7 +21,8 @@ const char *API_URL =
 #define PIN_BTN_RELAY 5
 
 #define LCD_INTERVAL 150
-#define HTTP_INTERVAL 500 // Constant update interval (0.5s)
+#define HTTP_INTERVAL 500    // Constant update interval (0.5s)
+#define MOVING_AVG_SAMPLES 5 // Number of samples for moving average
 
 // ================= OBJECT =================
 
@@ -49,6 +50,8 @@ bool btnHeld = false;
 
 float currentWeight = 0;
 float lastSentWeight = 0;
+float movingAvgBuffer[MOVING_AVG_SAMPLES] = {0}; // NEW: Filter buffer
+int bufferIndex = 0;                             // NEW: Buffer position
 bool isSending = false;
 
 // ================= UTILITY =================
@@ -61,6 +64,30 @@ void buzzerBeep(int times = 1, int on = 70, int off = 80) {
     delay(off);
   }
 }
+
+// ================= FILTERING =================
+
+float getFilteredWeight() {
+  if (!scale.is_ready())
+    return currentWeight;
+
+  // Read raw weight (in grams)
+  float rawWeight = scale.get_units(1);
+
+  // Update moving average buffer
+  movingAvgBuffer[bufferIndex] = rawWeight;
+  bufferIndex = (bufferIndex + 1) % MOVING_AVG_SAMPLES;
+
+  // Calculate average
+  float sum = 0;
+  for (int i = 0; i < MOVING_AVG_SAMPLES; i++) {
+    sum += movingAvgBuffer[i];
+  }
+
+  return sum / MOVING_AVG_SAMPLES;
+}
+
+// Milestone logic moved to backend for delta calculation
 
 void setRelay(bool state) {
   if (isRelayOn == state)
@@ -238,9 +265,9 @@ void loop() {
   }
   lastRelayBtn = relayBtn;
 
-  // 2. Weight Reading
+  // 2. Weight Reading with Filtering
   if (scale.is_ready()) {
-    currentWeight = scale.get_units(1); // Realtime
+    currentWeight = getFilteredWeight(); // Get filtered weight in grams
   }
 
   // 3. LCD Update
@@ -254,13 +281,21 @@ void loop() {
   if (isRelayOn && kg >= relayThreshold) {
     setRelay(false);
     buzzerBeep(3);
-    if (!offlineMode)
-      sendData(kg, true); // Force ON status so backend accepts final log
+    if (!offlineMode) {
+      sendData(kg, true); // Force final log with relay ON status
+    }
   }
 
-  // 5. Intelligent Stream
+  // 5. Continuous Data Stream (Backend handles milestone logic)
   if (!offlineMode) {
     if (millis() - lastHTTP >= HTTP_INTERVAL) {
+      float kg = currentWeight / 1000.0;
+
+      // ALWAYS send weight data for real-time monitoring
+      // Backend will:
+      // 1. Save to loadcellReading (for real-time widget)
+      // 2. Check milestone and calculate delta
+      // 3. Save delta to packingLog (for accurate statistics)
       sendData(kg, isRelayOn);
       lastHTTP = millis();
     }
