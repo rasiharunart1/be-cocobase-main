@@ -65,7 +65,11 @@ const getPackingLogs = async (req, res, next) => {
   try {
     const { deviceId } = req.params;
     const logs = await prisma.packingLog.findMany({
-      where: { deviceId: parseInt(deviceId) },
+      where: {
+        deviceId: parseInt(deviceId),
+        // Filter out session markers (weight 0)
+        weight: { gt: 0 }
+      },
       orderBy: [
         { createdAt: 'desc' },
         { id: 'desc' }
@@ -230,12 +234,24 @@ const ingestData = async (req, res, next) => {
       console.log(`🛑 Max threshold reached: ${currentWeight}kg`);
     }
 
+    // Calculate Grand Total (Sum of all pending logs for this device)
+    // This allows tracking total harvest (e.g. 300kg) across multiple small batches (30-50kg)
+    const aggregateTotal = await prisma.packingLog.aggregate({
+      _sum: { weight: true },
+      where: {
+        deviceId: device.id,
+        petaniId: null
+      }
+    });
+    const totalRecorded = aggregateTotal._sum.weight || 0.0;
+
     // Return thresholds and any pending commands to ESP32
     let responsePayload = {
       success: true,
       message: "Reading recorded",
       threshold: device.threshold || 10.0,
-      relayThreshold: device.relayThreshold || 50.0
+      relayThreshold: device.relayThreshold || 50.0,
+      totalWeight: totalRecorded // Return this so frontend/ESP32 can display "Total: 150kg"
     };
 
     // Handle pending commands (calibration, tare, etc.)
