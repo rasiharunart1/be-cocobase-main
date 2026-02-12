@@ -93,17 +93,18 @@ const ingestData = async (req, res, next) => {
     }
 
     const currentWeight = parseFloat(weight);
+    const isRelayOn = req.body.isRelayOn === true || req.body.isRelayOn === "true";
 
     // ALWAYS save to loadcellReading for real-time monitoring
     await prisma.loadcellReading.create({
       data: {
         weight: currentWeight,
-        deviceId: device.id
+        deviceId: device.id,
+        isRelayOn: isRelayOn
       }
     });
 
     const RESET_THRESHOLD = 0.5;
-    const isRelayOn = req.body.isRelayOn === true || req.body.isRelayOn === "true";
 
     // Reset device to ready state when weight drops
     if (currentWeight <= RESET_THRESHOLD && !device.isReady) {

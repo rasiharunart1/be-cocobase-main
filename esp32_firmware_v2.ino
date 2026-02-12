@@ -3,8 +3,10 @@
 #include <HTTPClient.h>
 #include <HX711.h>
 #include <LiquidCrystal_I2C.h>
+#include <WiFiClientSecure.h> // NEW: Required for HTTPS
 #include <WiFiManager.h>
 #include <Wire.h>
+
 
 // ================= CONFIG =================
 
@@ -29,6 +31,7 @@ const char *API_URL =
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 HX711 scale;
 HTTPClient http;
+WiFiClientSecure client; // NEW: Secure client
 
 // ================= PARAM =================
 
@@ -50,6 +53,7 @@ bool btnHeld = false;
 
 float currentWeight = 0;
 float lastSentWeight = 0;
+float lastLoggedWeight = 0; // NEW: Track last weight that was logged
 float movingAvgBuffer[MOVING_AVG_SAMPLES] = {0}; // NEW: Filter buffer
 int bufferIndex = 0;                             // NEW: Buffer position
 bool isSending = false;
@@ -87,7 +91,23 @@ float getFilteredWeight() {
   return sum / MOVING_AVG_SAMPLES;
 }
 
-// Milestone logic moved to backend for delta calculation
+bool shouldLog(float newWeightKg, float thresholdKg) {
+  // Calculate which threshold milestone we've passed
+  // Example: if threshold = 5kg
+  // - At 5.1kg: currentMilestone = 1 (crossed first 5kg)
+  // - At 10.3kg: currentMilestone = 2 (crossed second 5kg)
+  // - At 15.2kg: currentMilestone = 3 (crossed third 5kg)
+
+  int currentMilestone = (int)(newWeightKg / thresholdKg);
+  int lastMilestone = (int)(lastLoggedWeight / thresholdKg);
+
+  // Log if we've crossed into a new threshold milestone
+  if (currentMilestone > lastMilestone) {
+    return true;
+  }
+
+  return false;
+}
 
 void setRelay(bool state) {
   if (isRelayOn == state)
@@ -139,26 +159,31 @@ void processServerCommand(JsonDocument &rDoc) {
   if (rDoc["command"].isNull())
     return;
 
-  String cmd = rDoc["command"]["type"].as<String>();
+  // Check if command is object or string to be safe, though backend sends
+  // object
+  if (rDoc["command"].is<JsonObject>()) {
+    String cmd = rDoc["command"]["type"].as<String>();
+    Serial.println("Received Command: " + cmd);
 
-  if (cmd == "TARE") {
-    scale.tare();
-    buzzerBeep(2);
-  } else if (cmd == "START_RELAY") {
-    setRelay(true);
-  } else if (cmd == "STOP_RELAY") {
-    setRelay(false);
-  } else if (cmd == "CALIBRATE") {
-    float val = rDoc["command"]["value"].as<float>();
-    if (val > 0) {
-      lcd.clear();
-      lcd.print("Calibrating...");
-      long raw = scale.read_average(20);
-      calibrationFactor = raw / (val * 1000.0);
-      scale.set_scale(calibrationFactor);
-      EEPROM.put(0, calibrationFactor);
-      EEPROM.commit();
-      buzzerBeep(3);
+    if (cmd == "TARE") {
+      scale.tare();
+      buzzerBeep(2);
+    } else if (cmd == "START_RELAY") {
+      setRelay(true);
+    } else if (cmd == "STOP_RELAY") {
+      setRelay(false);
+    } else if (cmd == "CALIBRATE") {
+      float val = rDoc["command"]["value"].as<float>();
+      if (val > 0) {
+        lcd.clear();
+        lcd.print("Calibrating...");
+        long raw = scale.read_average(20);
+        calibrationFactor = raw / (val * 1000.0);
+        scale.set_scale(calibrationFactor);
+        EEPROM.put(0, calibrationFactor);
+        EEPROM.commit();
+        buzzerBeep(3);
+      }
     }
   }
 }
@@ -172,7 +197,10 @@ void sendData(float weight, bool relayState) {
   isSending = true;
   updateLCD(currentWeight);
 
-  http.begin(API_URL);
+  // Ensure SSL client
+  client.setInsecure(); // Bypass cert check for Vercel/Self-signed
+  http.begin(client, API_URL);
+
   http.addHeader("Content-Type", "application/json");
   http.setReuse(true);
 
@@ -188,10 +216,23 @@ void sendData(float weight, bool relayState) {
   int code = http.POST(json);
   if (code > 0) {
     String resp = http.getString();
+
+    // Add logging
+    Serial.printf("HTTP %d, Resp: %s\n", code, resp.c_str());
+
     JsonDocument rDoc;
-    deserializeJson(rDoc, resp);
-    processServerCommand(rDoc);
+    DeserializationError error = deserializeJson(rDoc, resp);
+
+    if (error) {
+      Serial.print(F("deserializeJson() failed: "));
+      Serial.println(error.f_str());
+    } else {
+      processServerCommand(rDoc);
+    }
+  } else {
+    Serial.printf("HTTP Failed: %s\n", http.errorToString(code).c_str());
   }
+
   isSending = false;
   lastSentWeight = weight;
 }
@@ -282,22 +323,30 @@ void loop() {
     setRelay(false);
     buzzerBeep(3);
     if (!offlineMode) {
-      sendData(kg, true); // Force final log with relay ON status
+      sendData(kg, true);   // Force final log with relay ON status
+      lastLoggedWeight = 0; // Reset for next session
     }
   }
 
-  // 5. Continuous Data Stream (Backend handles milestone logic)
+  // 5. Intelligent Stream with Threshold Milestones
   if (!offlineMode) {
     if (millis() - lastHTTP >= HTTP_INTERVAL) {
       float kg = currentWeight / 1000.0;
 
-      // ALWAYS send weight data for real-time monitoring
-      // Backend will:
-      // 1. Save to loadcellReading (for real-time widget)
-      // 2. Check milestone and calculate delta
-      // 3. Save delta to packingLog (for accurate statistics)
-      sendData(kg, isRelayOn);
-      lastHTTP = millis();
+      // Only send if relay is ON and weight crossed threshold milestone
+      if (isRelayOn && shouldLog(kg, targetThreshold)) {
+        sendData(kg, isRelayOn);
+        lastLoggedWeight = kg; // Update last logged weight
+        lastHTTP = millis();
+        Serial.printf("📦 Milestone Log: %.2fkg (Threshold: %.0fkg)\n", kg,
+                      targetThreshold);
+      } else if (!isRelayOn) {
+        // Always send when relay is OFF (for monitoring)
+        sendData(kg, isRelayOn);
+        lastHTTP = millis();
+      } else {
+        lastHTTP = millis(); // Update timer even if not sending
+      }
     }
   }
 }
