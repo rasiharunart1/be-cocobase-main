@@ -224,6 +224,61 @@ const updateProfilePhoto = async (req, res, next) => {
   }
 };
 
+const updatePassword = async (req, res, next) => {
+  try {
+    const { oldPassword, newPassword } = req.body;
+
+    // Validate input
+    if (!oldPassword || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "Old password and new password are required",
+        data: null,
+      });
+    }
+
+    // Retrieve current admin data
+    const admin = await prisma.admin.findUnique({
+      where: { id: req.user.id },
+    });
+
+    if (!admin) {
+      return res.status(404).json({
+        success: false,
+        message: "Admin not found",
+        data: null,
+      });
+    }
+
+    // Verify old password
+    const isMatch = await bcrypt.compare(oldPassword, admin.password);
+    if (!isMatch) {
+      return res.status(400).json({
+        success: false,
+        message: "Old password is incorrect",
+        data: null,
+      });
+    }
+
+    // Hash new password
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    // Update password
+    await prisma.admin.update({
+      where: { id: req.user.id },
+      data: { password: hashedPassword },
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Password updated successfully!",
+      data: null,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   createAdmin,
   authenticate,
@@ -232,4 +287,5 @@ module.exports = {
   getProfile,
   updateProfile,
   updateProfilePhoto,
+  updatePassword,
 };
