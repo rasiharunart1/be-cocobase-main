@@ -7,7 +7,6 @@
 #include <WiFiManager.h>
 #include <Wire.h>
 
-
 // ================= CONFIG =================
 
 const char *DEVICE_TOKEN = "7400e85c-80ef-4352-8400-6361294d3050";
@@ -334,11 +333,13 @@ void loop() {
       float kg = currentWeight / 1000.0;
 
       // Only send if relay is ON and weight crossed threshold milestone
-      if (isRelayOn && shouldLog(kg, targetThreshold)) {
+      // We use a smaller step (1.0kg) for transmission so the backend
+      // can catch the 5.0kg logs precisely even with small offsets.
+      if (isRelayOn && shouldLog(kg, 1.0)) {
         sendData(kg, isRelayOn);
         lastLoggedWeight = kg; // Update last logged weight
         lastHTTP = millis();
-        Serial.printf("📦 Milestone Log: %.2fkg (Threshold: %.0fkg)\n", kg,
+        Serial.printf("📦 Stream Update: %.2fkg (Threshold: %.0fkg)\n", kg,
                       targetThreshold);
       } else if (!isRelayOn) {
         // Always send when relay is OFF (for monitoring)

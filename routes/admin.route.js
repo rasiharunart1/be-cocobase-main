@@ -1,5 +1,5 @@
 const router = require('express').Router();
-const { loginAdmin, getProfile, updateProfile, updateProfilePhoto } = require('../controllers/admin.controller');
+const { loginAdmin, getProfile, updateProfile, updateProfilePhoto, updatePassword } = require('../controllers/admin.controller');
 const verifyToken = require('../middlewares/verifyToken');
 const upload = require('../libs/uploadImage'); // Assumed upload middleware if needed, but updatedProfilePhoto uses req.file
 
@@ -17,6 +17,7 @@ const upload = require('../libs/uploadImage'); // Assumed upload middleware if n
 router.post('/login', loginAdmin);
 router.get('/profile', verifyToken, getProfile);
 router.put('/profile', verifyToken, updateProfile);
+router.put('/password', verifyToken, updatePassword);
 // router.put('/profile/photo', verifyToken, upload.single('photo'), updateProfilePhoto); // Commented out until upload middleware verified
 
 module.exports = router;
