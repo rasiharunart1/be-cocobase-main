@@ -7,7 +7,7 @@ const {
 } = require('../controllers/scrap.controller');
 const verifyToken = require('../middlewares/verifyToken');
 
-router.get('/', getAllScrap);
+router.get('/', verifyToken, getAllScrap);
 router.post('/', verifyToken, createScrap);
 router.put('/:id', verifyToken, updateScrap);
 router.delete('/:id', verifyToken, deleteScrap);

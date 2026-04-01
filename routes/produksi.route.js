@@ -9,8 +9,8 @@ const {
 } = require('../controllers/produksi.controller');
 const verifyToken = require('../middlewares/verifyToken');
 
-router.get('/', getAllProduksi);
-router.get('/:id', getProduksiById);
+router.get('/', verifyToken, getAllProduksi);
+router.get('/:id', verifyToken, getProduksiById);
 router.post('/', verifyToken, createProduksi);
 router.put('/:id', verifyToken, updateProduksi);
 router.put('/status/:id', verifyToken, updateProduksiStatus);

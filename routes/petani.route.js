@@ -14,10 +14,10 @@ const verifyToken = require('../middlewares/verifyToken');
 // I'll add verifyToken if I can find it, otherwise I might skip it for now or check if it's available.
 // I saw verifyToken usage in auth-petani.route.js: require('../middlewares/verifyToken');
 
-router.get('/', getAllPetani);
-router.get('/:id', getPetaniById);
-router.post('/', verifyToken, createPetani); // Auth required
-router.put('/:id', verifyToken, updatePetani); // Auth required
-router.delete('/:id', verifyToken, deletePetani); // Auth required
+router.get('/', verifyToken, getAllPetani);
+router.get('/:id', verifyToken, getPetaniById);
+router.post('/', verifyToken, createPetani);
+router.put('/:id', verifyToken, updatePetani);
+router.delete('/:id', verifyToken, deletePetani);
 
 module.exports = router;

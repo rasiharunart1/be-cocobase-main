@@ -58,6 +58,7 @@ const createPetani = async (req, res, next) => {
 const getAllPetani = async (req, res, next) => {
   try {
     const { page = 1, limit = 10, search } = req.query;
+    const id_admin = req.user.id;
 
     // Safety check for pagination
     const pageNum = toNumber(page) || 1;
@@ -66,29 +67,23 @@ const getAllPetani = async (req, res, next) => {
     const skip = (pageNum - 1) * limitNum;
     const take = limitNum;
 
+    const whereConditions = {
+      id_admin,
+      ...(search && search !== "undefined" ? {
+        nama: { contains: search, mode: "insensitive" },
+      } : {}),
+    };
+
     const [getPetani, { _count }] = await Promise.all([
       prisma.petani.findMany({
-        where: search && search !== "undefined" ? {
-          nama: {
-            contains: search,
-            mode: "insensitive",
-            // Remove 'undefined' check inside query if prisma handles cleaner
-          },
-        } : {},
+        where: whereConditions,
         skip,
         take,
-        orderBy: {
-          nama: 'asc',
-        },
+        orderBy: { nama: 'asc' },
       }),
       prisma.petani.aggregate({
         _count: { id: true },
-        where: search && search !== "undefined" ? {
-          nama: {
-            contains: search,
-            mode: "insensitive",
-          },
-        } : {},
+        where: whereConditions,
       }),
     ]);
 
@@ -101,7 +96,6 @@ const getAllPetani = async (req, res, next) => {
     });
   } catch (err) {
     console.error("[GetAllPetani] Error:", err);
-    // next(err); // Removed to prevent double response
     handleErrorResponse(res, err);
   }
 };
@@ -109,17 +103,26 @@ const getAllPetani = async (req, res, next) => {
 const getPetaniById = async (req, res, next) => {
   try {
     const { id } = req.params;
+    const id_admin = req.user.id;
+
     const petani = await prisma.petani.findUnique({
       where: { id: toNumber(id) },
-      include: {
-        produksi: true,
-      },
+      include: { produksi: true },
     });
 
     if (!petani) {
       return res.status(404).json({
         success: false,
         message: "Petani tidak ditemukan",
+        err: null,
+        data: null,
+      });
+    }
+
+    if (petani.id_admin !== id_admin) {
+      return res.status(403).json({
+        success: false,
+        message: "Forbidden! Petani ini bukan milik Anda",
         err: null,
         data: null,
       });
@@ -154,7 +157,7 @@ const updatePetani = async (req, res, next) => {
     const id_admin = req.user.id;
     const { id } = req.params;
 
-    // 3. Check Existence
+    // 3. Check Existence & Ownership
     const check = await prisma.petani.findUnique({
       where: { id: toNumber(id) },
     });
@@ -163,6 +166,15 @@ const updatePetani = async (req, res, next) => {
       return res.status(404).json({
         success: false,
         message: "Petani tidak ditemukan",
+        err: null,
+        data: null,
+      });
+    }
+
+    if (check.id_admin !== id_admin) {
+      return res.status(403).json({
+        success: false,
+        message: "Forbidden! Petani ini bukan milik Anda",
         err: null,
         data: null,
       });
@@ -210,6 +222,7 @@ const updatePetani = async (req, res, next) => {
 const deletePetani = async (req, res, next) => {
   try {
     const { id } = req.params;
+    const id_admin = req.user.id;
 
     const check = await prisma.petani.findUnique({
       where: { id: toNumber(id) },
@@ -224,7 +237,16 @@ const deletePetani = async (req, res, next) => {
       });
     }
 
-    await prisma.petani.delete({ where: { id: toNumber(id) }, });
+    if (check.id_admin !== id_admin) {
+      return res.status(403).json({
+        success: false,
+        message: "Forbidden! Petani ini bukan milik Anda",
+        err: null,
+        data: null,
+      });
+    }
+
+    await prisma.petani.delete({ where: { id: toNumber(id) } });
 
     return res.status(200).json({
       success: true,

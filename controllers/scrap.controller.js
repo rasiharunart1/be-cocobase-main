@@ -59,7 +59,10 @@ const createScrap = async (req, res, next) => {
 
 const getAllScrap = async (req, res, next) => {
   try {
+    const id_admin = req.user.id;
+
     const getScrap = await prisma.scrap.findMany({
+      where: { id_admin },
       orderBy: [
         { tahun: 'asc' },
         { bulan: 'asc' },
@@ -119,6 +122,15 @@ const updateScrap = async (req, res, next) => {
       });
     }
 
+    if (check.id_admin !== id_admin) {
+      return res.status(403).json({
+        success: false,
+        message: "Forbidden! Scrap ini bukan milik Anda",
+        err: null,
+        data: null,
+      });
+    }
+
     const scrap = await prisma.scrap.update({
       where: { id: toNumber(id) },
       data: {
@@ -142,6 +154,7 @@ const updateScrap = async (req, res, next) => {
 const deleteScrap = async (req, res, next) => {
   try {
     const { id } = req.params;
+    const id_admin = req.user.id;
 
     const check = await prisma.scrap.findUnique({
       where: { id: toNumber(id) },
@@ -156,7 +169,16 @@ const deleteScrap = async (req, res, next) => {
       });
     }
 
-    await prisma.scrap.delete({ where: { id: toNumber(id) }, });
+    if (check.id_admin !== id_admin) {
+      return res.status(403).json({
+        success: false,
+        message: "Forbidden! Scrap ini bukan milik Anda",
+        err: null,
+        data: null,
+      });
+    }
+
+    await prisma.scrap.delete({ where: { id: toNumber(id) } });
 
     return res.status(200).json({
       success: true,

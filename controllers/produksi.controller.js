@@ -29,6 +29,16 @@ const createProduksi = async (req, res, next) => {
       });
     }
 
+    // Validasi petani milik admin yang sama
+    if (petaniExists.id_admin !== id_admin) {
+      return res.status(403).json({
+        success: false,
+        message: "Forbidden! Petani ini bukan milik Anda",
+        err: null,
+        data: null,
+      });
+    }
+
     const produksi = await prisma.produksi.create({
       data: { id_admin, id_petani, produk, jumlah },
     });
@@ -48,8 +58,10 @@ const createProduksi = async (req, res, next) => {
 const getAllProduksi = async (req, res, next) => {
   try {
     const { page = 1, limit = 10, status, search } = req.query;
+    const id_admin = req.user.id;
 
     const whereConditions = {
+      id_admin,
       ...(search && {
         produk: { contains: search, mode: "insensitive" },
       }),
@@ -99,6 +111,7 @@ const getAllProduksi = async (req, res, next) => {
 const getProduksiById = async (req, res, next) => {
   try {
     const { id } = req.params;
+    const id_admin = req.user.id;
 
     const produksi = await prisma.produksi.findUnique({
       where: { id: Number(id) },
@@ -109,6 +122,15 @@ const getProduksiById = async (req, res, next) => {
       return res.status(404).json({
         success: false,
         message: "Produksi tidak ditemukan",
+        err: null,
+        data: null,
+      });
+    }
+
+    if (produksi.id_admin !== id_admin) {
+      return res.status(403).json({
+        success: false,
+        message: "Forbidden! Produksi ini bukan milik Anda",
         err: null,
         data: null,
       });
@@ -153,6 +175,15 @@ const updateProduksi = async (req, res, next) => {
       });
     }
 
+    if (check.id_admin !== id_admin) {
+      return res.status(403).json({
+        success: false,
+        message: "Forbidden! Produksi ini bukan milik Anda",
+        err: null,
+        data: null,
+      });
+    }
+
     const produksi = await prisma.produksi.update({
       where: { id: Number(id) },
       data: { id_admin, ...value },
@@ -188,6 +219,15 @@ const updateProduksiStatus = async (req, res, next) => {
       });
     }
 
+    if (check.id_admin !== id_admin) {
+      return res.status(403).json({
+        success: false,
+        message: "Forbidden! Produksi ini bukan milik Anda",
+        err: null,
+        data: null,
+      });
+    }
+
     const produksi = await prisma.produksi.update({
       where: { id: Number(id) },
       data: { id_admin, status: value.status },
@@ -208,12 +248,22 @@ const updateProduksiStatus = async (req, res, next) => {
 const deleteProduksi = async (req, res, next) => {
   try {
     const { id } = req.params;
+    const id_admin = req.user.id;
 
     const check = await checkExistence(id, 'produksi');
     if (!check) {
       return res.status(404).json({
         success: false,
         message: "Produksi tidak ditemukan",
+        err: null,
+        data: null,
+      });
+    }
+
+    if (check.id_admin !== id_admin) {
+      return res.status(403).json({
+        success: false,
+        message: "Forbidden! Produksi ini bukan milik Anda",
         err: null,
         data: null,
       });
