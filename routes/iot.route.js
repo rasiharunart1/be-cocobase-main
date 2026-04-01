@@ -5,19 +5,25 @@ const {
   ingestData,
   deletePackingLog,
   resetDeviceLogs,
-  verifyPacking
+  verifyPacking,
+  sendCommand,
+  createPackingLog,
 } = require('../controllers/iot.controller.js');
+const verifyToken = require('../middlewares/verifyToken');
 
-router.get('/loadcell/:deviceId', getLatestLoadcellReading);
-router.get('/loadcell/latest/:deviceId', getLatestLoadcellReading);
-router.get('/loadcell/logs/:deviceId', getPackingLogs);
+// === ESP32 Endpoints (no JWT — authenticated by device token) ===
 router.post('/loadcell/ingest', ingestData);
-router.post('/loadcell/pack', require('../controllers/iot.controller.js').createPackingLog);
-router.post('/logs/verify/:id', verifyPacking);
-router.post('/commands/:deviceId', require('../controllers/iot.controller.js').sendCommand);
+router.post('/loadcell/pack', createPackingLog);
 
-// Log Management Routes
-router.delete('/logs/:id', deletePackingLog);
-router.delete('/logs/reset/:deviceId', resetDeviceLogs);
+// === Admin Endpoints (JWT required) ===
+router.get('/loadcell/:deviceId', verifyToken, getLatestLoadcellReading);
+router.get('/loadcell/latest/:deviceId', verifyToken, getLatestLoadcellReading);
+router.get('/loadcell/logs/:deviceId', verifyToken, getPackingLogs);
+router.post('/logs/verify/:id', verifyToken, verifyPacking);
+router.post('/commands/:deviceId', verifyToken, sendCommand);
+
+// Log Management (JWT required)
+router.delete('/logs/:id', verifyToken, deletePackingLog);
+router.delete('/logs/reset/:deviceId', verifyToken, resetDeviceLogs);
 
 module.exports = router;

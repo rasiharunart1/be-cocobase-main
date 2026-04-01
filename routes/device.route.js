@@ -3,12 +3,13 @@ const {
     getDevices,
     createDevice,
     updateDevice,
-    deleteDevice
+    deleteDevice,
 } = require('../controllers/device.controller');
+const verifyToken = require('../middlewares/verifyToken');
 
-router.get('/', getDevices);
-router.post('/', createDevice);
-router.put('/:id', updateDevice);
-router.delete('/:id', deleteDevice);
+router.get('/', verifyToken, getDevices);
+router.post('/', verifyToken, createDevice);
+router.put('/:id', verifyToken, updateDevice);
+router.delete('/:id', verifyToken, deleteDevice);
 
 module.exports = router;
