@@ -1,5 +1,5 @@
 const router = require('express').Router();
-const { loginAdmin, getProfile, updateProfile, updateProfilePhoto, updatePassword } = require('../controllers/admin.controller');
+const { createAdmin, loginAdmin, getProfile, updateProfile, updateProfilePhoto, updatePassword } = require('../controllers/admin.controller');
 const verifyToken = require('../middlewares/verifyToken');
 const upload = require('../libs/uploadImage'); // Assumed upload middleware if needed, but updatedProfilePhoto uses req.file
 
@@ -14,6 +14,7 @@ const upload = require('../libs/uploadImage'); // Assumed upload middleware if n
 // So there MUST be a middleware populateing req.file.
 // I'll assume standard multer setup.
 
+router.post('/register', createAdmin);
 router.post('/login', loginAdmin);
 router.get('/profile', verifyToken, getProfile);
 router.put('/profile', verifyToken, updateProfile);
