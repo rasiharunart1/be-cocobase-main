@@ -1,13 +1,13 @@
 const prisma = require('../libs/prisma');
 
-// Helper: cek apakah device (by id) milik admin yang login (atau belum diklaim)
+// Helper: cek apakah device (by id) milik admin yang login
 const requireDeviceOwner = async (deviceId, adminId, res) => {
   const device = await prisma.device.findUnique({ where: { id: parseInt(deviceId) } });
   if (!device) {
     res.status(404).json({ success: false, message: "Device tidak ditemukan" });
     return null;
   }
-  // Device dengan id_admin null = belum diklaim, bisa diakses semua admin
+  // Device id_admin null = belum diklaim, boleh diakses (auto-claim via devices endpoint)
   if (device.id_admin !== null && device.id_admin !== adminId) {
     res.status(403).json({ success: false, message: "Forbidden! Device ini bukan milik Anda" });
     return null;

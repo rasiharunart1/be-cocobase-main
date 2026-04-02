@@ -1,13 +1,13 @@
 const prisma = require("../libs/prisma");
 const crypto = require("crypto");
 
-// Helper: cek apakah device milik admin yang login (atau belum diklaim)
+// Helper: cek apakah device milik admin yang login
+// Device id_admin null = belum diklaim, bisa diakses (akan auto-claim saat diedit)
 const checkDeviceOwnership = async (deviceId, adminId) => {
     const device = await prisma.device.findUnique({
         where: { id: parseInt(deviceId) },
     });
     if (!device) return { device: null, error: 'not_found' };
-    // Device dengan id_admin null = belum diklaim, bisa diakses semua admin
     if (device.id_admin !== null && device.id_admin !== adminId) return { device, error: 'forbidden' };
     return { device, error: null };
 };
@@ -15,14 +15,9 @@ const checkDeviceOwnership = async (deviceId, adminId) => {
 const getDevices = async (req, res, next) => {
     try {
         const id_admin = req.user.id;
-        // Tampilkan device milik admin ini ATAU device yang belum diklaim (id_admin null)
+        // Hanya tampilkan device milik admin ini
         const devices = await prisma.device.findMany({
-            where: {
-                OR: [
-                    { id_admin },
-                    { id_admin: null },
-                ]
-            },
+            where: { id_admin },
             orderBy: { createdAt: "desc" },
         });
         res.status(200).json({ success: true, data: devices });
@@ -66,6 +61,8 @@ const updateDevice = async (req, res, next) => {
             where: { id: parseInt(id) },
             data: {
                 name,
+                // Auto-claim: jika device belum punya pemilik, set id_admin sekarang
+                id_admin: device.id_admin ?? id_admin,
                 threshold: threshold ? parseFloat(threshold) : undefined,
                 relayThreshold: req.body.relayThreshold ? parseFloat(req.body.relayThreshold) : undefined,
                 calibrationFactor: req.body.calibrationFactor ? parseFloat(req.body.calibrationFactor) : undefined,
