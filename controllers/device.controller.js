@@ -15,11 +15,25 @@ const checkDeviceOwnership = async (deviceId, adminId) => {
 const getDevices = async (req, res, next) => {
     try {
         const id_admin = req.user.id;
-        // Hanya tampilkan device milik admin ini
+
+        // Cari device tanpa pemilik (id_admin null) dan langsung claim ke admin ini
+        const unclaimed = await prisma.device.findMany({
+            where: { id_admin: null },
+        });
+
+        if (unclaimed.length > 0) {
+            await prisma.device.updateMany({
+                where: { id_admin: null },
+                data: { id_admin },
+            });
+        }
+
+        // Setelah claim, ambil semua device milik admin ini
         const devices = await prisma.device.findMany({
             where: { id_admin },
             orderBy: { createdAt: "desc" },
         });
+
         res.status(200).json({ success: true, data: devices });
     } catch (err) {
         next(err);
