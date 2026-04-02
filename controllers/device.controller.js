@@ -1,21 +1,28 @@
 const prisma = require("../libs/prisma");
 const crypto = require("crypto");
 
-// Helper: cek apakah device milik admin yang login
+// Helper: cek apakah device milik admin yang login (atau belum diklaim)
 const checkDeviceOwnership = async (deviceId, adminId) => {
     const device = await prisma.device.findUnique({
         where: { id: parseInt(deviceId) },
     });
     if (!device) return { device: null, error: 'not_found' };
-    if (device.id_admin !== adminId) return { device, error: 'forbidden' };
+    // Device dengan id_admin null = belum diklaim, bisa diakses semua admin
+    if (device.id_admin !== null && device.id_admin !== adminId) return { device, error: 'forbidden' };
     return { device, error: null };
 };
 
 const getDevices = async (req, res, next) => {
     try {
         const id_admin = req.user.id;
+        // Tampilkan device milik admin ini ATAU device yang belum diklaim (id_admin null)
         const devices = await prisma.device.findMany({
-            where: { id_admin },
+            where: {
+                OR: [
+                    { id_admin },
+                    { id_admin: null },
+                ]
+            },
             orderBy: { createdAt: "desc" },
         });
         res.status(200).json({ success: true, data: devices });
